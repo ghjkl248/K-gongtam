@@ -214,11 +214,41 @@ const COMPS=[
   {key:'fx',      name:'환율',     desc:'원달러 안전자산'},
 ];
 
-let scores={}, history=[], chatMessages=[
-  {nick:'주식고수99', text:'오늘 코스피 엄청 강하네요! 탐욕 구간 진입', time:'10:23'},
-  {nick:'반도체덕후', text:'삼성전자 외인 순매수 계속 들어오는중',       time:'11:05'},
-  {nick:'개미투자자', text:'K-공탐지수 보고 타점 잡기 좋네요',           time:'12:41'},
-];
+let scores={}, history=[], chatMessages=[];
+
+// ── Firebase 실시간 대화방 ──
+const FIREBASE_URL='https://k-gongtam-default-rtdb.firebaseio.com';
+
+async function loadChat(){
+  try{
+    const r=await fetch(`${FIREBASE_URL}/messages.json?orderBy="ts"&limitToLast=50`);
+    const d=await r.json();
+    if(!d){chatMessages=[];renderChat();return;}
+    chatMessages=Object.values(d).sort((a,b)=>a.ts-b.ts);
+    renderChat();
+  }catch(e){
+    // Firebase 미연결 시 기본 메시지
+    chatMessages=[
+      {nick:'주식고수99',text:'오늘 코스피 엄청 강하네요! 탐욕 구간 진입',time:'10:23',ts:1},
+      {nick:'반도체덕후',text:'삼성전자 외인 순매수 계속 들어오는중',time:'11:05',ts:2},
+      {nick:'개미투자자',text:'K-공탐지수 보고 타점 잡기 좋네요',time:'12:41',ts:3},
+    ];
+    renderChat();
+  }
+}
+
+async function saveMsg(msg){
+  try{
+    await fetch(`${FIREBASE_URL}/messages.json`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(msg)
+    });
+  }catch(e){console.log('저장 실패',e);}
+}
+
+// 30초마다 새 메시지 자동 로드
+setInterval(loadChat, 30000);
 
 function getState(s){
   if(s<=24)return{label:'극단 공포',short:'극단공포',col:'#E24B4A',eng:'Extreme Fear',desc:'극도의 공포 상태입니다. 역발상 매수 기회를 검토해 보세요.'};
@@ -297,10 +327,13 @@ function sendMsg(){
   const txt=inp.value.trim();
   if(!txt)return;
   const now=new Date();
-  chatMessages.push({nick,text:txt,time:String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')});
+  const time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const msg={nick,text:txt,time,ts:Date.now()};
+  chatMessages.push(msg);
   if(chatMessages.length>60)chatMessages.shift();
   inp.value='';
   renderChat();
+  saveMsg(msg); // Firebase에 영구 저장
 }
 
 function updateClock(){
@@ -379,7 +412,7 @@ function isMarketHours(){
   return mins>=540&&mins<=930;
 }
 
-renderChat();
+loadChat();
 updateClock();
 setInterval(updateClock,1000);
 loadAll();
