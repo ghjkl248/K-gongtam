@@ -1,0 +1,22 @@
+{
+  "name": "K-공탐지수",
+  "short_name": "K-공탐지수",
+  "description": "한국 코스피 공포탐욕지수 실시간 대시보드",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#E24B4A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

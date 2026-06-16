@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#E24B4A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="K-공탐지수">
+<meta property="og:title" content="K-공탐지수 — 한국 공포탐욕지수">
+<meta property="og:description" content="코스피 시장 심리를 실시간으로 확인하세요. AI 해석 + 대화방 포함">
+<title>K-공탐지수</title>
+<link rel="manifest" href="/manifest.json">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#E24B4A;--amber:#BA7517;--green:#0F6E56;
+  --teal:#1D9E75;--c1:#F09595;--c2:#FAC775;--c3:#C0DD97;--c4:#5DCAA5;
+  --bg:#F5F5F5;--card:#fff;--text:#111;--text2:#666;--border:rgba(0,0,0,0.09);
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#111;--card:#1c1c1e;--text:#f0f0f0;--text2:#888;--border:rgba(255,255,255,0.1)}
+}
+body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.app{max-width:420px;margin:0 auto;padding:12px 14px 30px}
+.header{display:flex;align-items:center;justify-content:space-between;padding:8px 0 14px}
+.logo{font-size:18px;font-weight:600;color:var(--text)}.logo span{color:var(--red)}
+.status{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.dot{width:6px;height:6px;border-radius:50%;background:#1D9E75;animation:p 2s infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:10px}
+.gauge-area{text-align:center;padding:4px 0 8px}
+.score-n{font-size:52px;font-weight:600;line-height:1;letter-spacing:-3px;margin:2px 0}
+.score-s{font-size:15px;font-weight:600;margin-bottom:3px}
+.score-d{font-size:12px;color:var(--text2);line-height:1.5}
+.comp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.comp-item{background:var(--bg);border-radius:10px;padding:8px 10px}
+.comp-name{font-size:10px;color:var(--text2);margin-bottom:4px}
+.comp-bar-bg{height:3px;background:var(--border);border-radius:2px;margin-bottom:3px}
+.comp-bar{height:100%;border-radius:2px;transition:width .5s}
+.comp-val{font-size:12px;font-weight:600}
+.vs-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.vs-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;text-align:center}
+.vs-lbl{font-size:10px;color:var(--text2);margin-bottom:4px}
+.vs-score{font-size:24px;font-weight:600;line-height:1}
+.vs-state{font-size:11px;margin-top:3px}
+.legend-bar{display:flex;height:24px;border-radius:8px;overflow:hidden;margin-bottom:10px}
+.leg-seg{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600}
+.leg-items{display:flex;justify-content:space-between}
+.leg-item{text-align:center;flex:1}
+.leg-dot{width:8px;height:8px;border-radius:50%;margin:0 auto 2px}
+.leg-range{font-size:9px;color:var(--text2);display:block}
+.leg-name{font-size:10px;font-weight:600}
+.hist-bars{display:flex;align-items:flex-end;gap:3px;height:44px}
+.hist-b{flex:1;border-radius:3px 3px 0 0;min-height:3px;transition:height .4s}
+.hist-lbl{display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-top:3px}
+.ai-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.ai-lbl{font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.ai-text{font-size:13px;color:var(--text);line-height:1.7}
+.chat-msgs{max-height:200px;overflow-y:auto;margin-bottom:8px;display:flex;flex-direction:column;gap:6px}
+.msg{padding:8px 11px;border-radius:14px;font-size:13px;line-height:1.5;max-width:86%}
+.msg-other{background:var(--bg);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
+.msg-me{background:var(--red);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.msg-nick{font-size:10px;color:var(--text2);margin-bottom:2px}
+.chat-row{display:flex;gap:6px}
+.chat-row input{flex:1;font-size:13px;padding:0 12px;height:36px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--text);outline:none}
+.chat-row input:focus{border-color:var(--red)}
+.send-btn{height:36px;padding:0 16px;font-size:13px;border-radius:20px;background:var(--red);color:#fff;border:none;cursor:pointer;font-weight:600}
+.sec-title{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.note{font-size:10px;color:var(--text2);text-align:center;line-height:1.7;padding:10px 0 4px}
+.refresh-btn{font-size:11px;padding:5px 12px;border-radius:14px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2)}
+.update-chip{font-size:10px;color:var(--text2);background:var(--bg);border-radius:8px;padding:3px 8px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="logo">K<span>-공탐지수</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="refresh-btn" onclick="loadAll()">&#x21BB; 새로고침</button>
+      <div class="status"><div class="dot"></div><span id="clock">--:--</span></div>
+    </div>
+  </div>
+
+  <!-- 게이지 -->
+  <div class="card">
+    <div class="gauge-area">
+      <svg viewBox="0 0 320 185" width="100%" style="max-width:340px;display:block;margin:0 auto;overflow:visible">
+        <path d="M 40 160 A 120 120 0 0 1 280 160" fill="none" stroke="var(--border)" stroke-width="26"/>
+        <path d="M 40 160 A 120 120 0 0 1 75.15 75.15"   fill="none" stroke="#F09595" stroke-width="24"/>
+        <path d="M 75.15 75.15 A 120 120 0 0 1 160 40"   fill="none" stroke="#FAC775" stroke-width="24"/>
+        <path d="M 160 40 A 120 120 0 0 1 244.85 75.15"  fill="none" stroke="#C0DD97" stroke-width="24"/>
+        <path d="M 244.85 75.15 A 120 120 0 0 1 280 160" fill="none" stroke="#5DCAA5" stroke-width="24"/>
+        <text x="16"  y="168" font-size="11" fill="var(--text2)" text-anchor="middle">0</text>
+        <text x="48"  y="62"  font-size="11" fill="var(--text2)" text-anchor="middle">25</text>
+        <text x="160" y="18"  font-size="11" fill="var(--text2)" text-anchor="middle">50</text>
+        <text x="272" y="62"  font-size="11" fill="var(--text2)" text-anchor="middle">75</text>
+        <text x="304" y="168" font-size="11" fill="var(--text2)" text-anchor="middle">100</text>
+        <!-- 바늘: score=50 → rotate=0(12시), score=0 → rotate=-90(9시), score=100 → rotate=+90(3시) -->
+        <g id="ndl" transform="rotate(-90 160 160)">
+          <line x1="160" y1="160" x2="160" y2="52" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="160" cy="160" r="9" fill="var(--text)"/>
+          <circle cx="160" cy="160" r="5" fill="var(--card)"/>
+        </g>
+      </svg>
+      <div class="score-n" id="score-n" style="color:var(--red)">--</div>
+      <div class="score-s" id="score-s" style="color:var(--red)">로딩 중...</div>
+      <div class="score-d" id="score-d">데이터를 불러오는 중입니다</div>
+      <div class="update-chip" id="update-chip" style="display:inline-block;margin-top:6px">마지막 업데이트: --</div>
+    </div>
+  </div>
+
+  <!-- AI 해석 -->
+  <div class="ai-box">
+    <div class="ai-lbl">&#10024; AI 시장 해석</div>
+    <div class="ai-text" id="ai-text"><span class="spin"></span> 분석 중...</div>
+  </div>
+
+  <!-- 한국 vs 미국 -->
+  <div class="vs-row">
+    <div class="vs-card">
+      <div style="font-size:18px;margin-bottom:3px">&#127472;&#127479;</div>
+      <div class="vs-lbl">K-공탐지수</div>
+      <div class="vs-score" id="kr-s" style="color:var(--teal)">--</div>
+      <div class="vs-state" id="kr-st" style="color:var(--teal)">--</div>
+    </div>
+    <div class="vs-card">
+      <div style="font-size:18px;margin-bottom:3px">&#127482;&#127480;</div>
+      <div class="vs-lbl">CNN Fear &amp; Greed</div>
+      <div class="vs-score" id="us-s" style="color:var(--amber)">--</div>
+      <div class="vs-state" id="us-st" style="color:var(--amber)">--</div>
+    </div>
+  </div>
+
+  <!-- 구성 지표 -->
+  <div class="card">
+    <div class="sec-title">구성 지표 (6개)</div>
+    <div class="comp-grid" id="comp-grid">
+      <div style="grid-column:span 2;text-align:center;padding:16px;color:var(--text2);font-size:12px"><span class="spin"></span></div>
+    </div>
+  </div>
+
+  <!-- 7일 히스토리 -->
+  <div class="card">
+    <div class="sec-title">최근 7일 추이</div>
+    <div class="hist-bars" id="hist-bars"></div>
+    <div class="hist-lbl" id="hist-lbl"></div>
+  </div>
+
+  <!-- 범례 -->
+  <div class="card">
+    <div class="sec-title">지수 해석 가이드</div>
+    <div class="legend-bar">
+      <div class="leg-seg" style="background:#F09595;color:#791F1F">극단공포</div>
+      <div class="leg-seg" style="background:#FAC775;color:#633806">공포</div>
+      <div class="leg-seg" style="background:#C0DD97;color:#3B6D11">중립</div>
+      <div class="leg-seg" style="background:#5DCAA5;color:#085041">탐욕</div>
+      <div class="leg-seg" style="background:#1D9E75;color:#fff">극단탐욕</div>
+    </div>
+    <div class="leg-items">
+      <div class="leg-item"><div class="leg-dot" style="background:#F09595"></div><span class="leg-range">0–24</span><div class="leg-name" style="color:#E24B4A">극단공포</div><div style="font-size:9px;color:var(--text2)">매수기회</div></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FAC775"></div><span class="leg-range">25–44</span><div class="leg-name" style="color:#BA7517">공포</div><div style="font-size:9px;color:var(--text2)">시장위축</div></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#C0DD97"></div><span class="leg-range">45–54</span><div class="leg-name" style="color:#3B6D11">중립</div><div style="font-size:9px;color:var(--text2)">균형상태</div></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#5DCAA5"></div><span class="leg-range">55–74</span><div class="leg-name" style="color:#0F6E56">탐욕</div><div style="font-size:9px;color:var(--text2)">과열주의</div></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#1D9E75"></div><span class="leg-range">75–100</span><div class="leg-name" style="color:#085041">극단탐욕</div><div style="font-size:9px;color:var(--text2)">매도고려</div></div>
+    </div>
+  </div>
+
+  <!-- 대화방 -->
+  <div class="card">
+    <div class="sec-title" style="display:flex;justify-content:space-between">
+      <span>&#128172; 실시간 대화방</span>
+      <span style="font-weight:400;color:var(--text2)">접속 <span id="cnt">--</span>명</span>
+    </div>
+    <div class="chat-msgs" id="chat-msgs"></div>
+    <div class="chat-row">
+      <input id="nick" placeholder="닉네임" style="max-width:76px;flex:none">
+      <input id="msg-inp" placeholder="의견을 남겨주세요..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="send-btn" onclick="sendMsg()">전송</button>
+    </div>
+  </div>
+
+  <div class="note">
+    투자에 대한 모든 책임은 본인에게 있습니다<br>
+    데이터: Yahoo Finance · Claude AI · KRX · 참고용<br>
+    장중 5분 / 장외 30분 자동 갱신
+  </div>
+</div>
+
+<script>
+const COMPS=[
+  {key:'momentum',name:'모멘텀',   desc:'KOSPI vs 이동평균'},
+  {key:'breadth', name:'시장폭',   desc:'상승/하락 비율'},
+  {key:'strength',name:'주가강도', desc:'52주 신고가/저가'},
+  {key:'foreign', name:'외인수급', desc:'외국인 순매수'},
+  {key:'vkospi',  name:'변동성',   desc:'VKOSPI 역수'},
+  {key:'fx',      name:'환율',     desc:'원달러 안전자산'},
+];
+
+let scores={}, history=[], chatMessages=[
+  {nick:'주식고수99', text:'오늘 코스피 엄청 강하네요! 탐욕 구간 진입', time:'10:23'},
+  {nick:'반도체덕후', text:'삼성전자 외인 순매수 계속 들어오는중',       time:'11:05'},
+  {nick:'개미투자자', text:'K-공탐지수 보고 타점 잡기 좋네요',           time:'12:41'},
+];
+
+function getState(s){
+  if(s<=24)return{label:'극단 공포',short:'극단공포',col:'#E24B4A',eng:'Extreme Fear',desc:'극도의 공포 상태입니다. 역발상 매수 기회를 검토해 보세요.'};
+  if(s<=44)return{label:'공포',     short:'공포',    col:'#BA7517',eng:'Fear',         desc:'시장이 위축되어 있습니다. 분할 매수를 고려해 볼 수 있습니다.'};
+  if(s<=54)return{label:'중립',     short:'중립',    col:'#639922',eng:'Neutral',      desc:'시장이 균형 상태입니다. 종목별 선별 접근이 유효합니다.'};
+  if(s<=74)return{label:'탐욕',     short:'탐욕',    col:'#0F6E56',eng:'Greed',        desc:'시장이 과열 조짐을 보이고 있습니다. 신중한 접근이 필요합니다.'};
+  return       {label:'극단 탐욕', short:'극단탐욕',col:'#085041',eng:'Extreme Greed',desc:'시장이 극도로 과열되어 있습니다. 차익실현을 고려해 보세요.'};
+}
+function barCol(s){if(s<=24)return'#F09595';if(s<=44)return'#FAC775';if(s<=54)return'#C0DD97';if(s<=74)return'#5DCAA5';return'#1D9E75';}
+function scoreToRot(s){return (s-50)*1.8;}
+
+function updateGauge(score){
+  const st=getState(score);
+  document.getElementById('score-n').textContent=score;
+  document.getElementById('score-n').style.color=st.col;
+  document.getElementById('score-s').textContent=st.label+' · '+st.eng;
+  document.getElementById('score-s').style.color=st.col;
+  document.getElementById('score-d').textContent=st.desc;
+  document.getElementById('kr-s').textContent=score;
+  document.getElementById('kr-s').style.color=st.col;
+  document.getElementById('kr-st').textContent=st.short;
+  document.getElementById('kr-st').style.color=st.col;
+  const ndl=document.getElementById('ndl');
+  if(ndl) ndl.setAttribute('transform','rotate('+scoreToRot(score)+' 160 160)');
+  const now=new Date();
+  const t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('update-chip').textContent='마지막 업데이트: '+t;
+}
+
+function renderComps(){
+  const g=document.getElementById('comp-grid');
+  if(!g||!Object.keys(scores).length)return;
+  g.innerHTML=COMPS.map(c=>{
+    const s=Math.round(scores[c.key]||50);
+    const col=barCol(s);
+    return`<div class="comp-item">
+      <div class="comp-name">${c.name}</div>
+      <div class="comp-bar-bg"><div class="comp-bar" style="width:${s}%;background:${col}"></div></div>
+      <div class="comp-val" style="color:${col}">${s}<span style="font-size:9px;color:var(--text2);font-weight:400"> ${c.desc}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistory(){
+  const bars=document.getElementById('hist-bars');
+  const lbl=document.getElementById('hist-lbl');
+  if(!bars||!history.length)return;
+  const max=Math.max(...history.map(h=>h.score));
+  bars.innerHTML=history.map((h,i)=>{
+    const col=barCol(h.score);
+    const pct=Math.round((h.score/max)*100);
+    const last=i===history.length-1;
+    return`<div class="hist-b" title="${h.label}: ${h.score}" style="background:${col};height:${pct}%;${last?'outline:2px solid var(--text);outline-offset:-1px':''}"></div>`;
+  }).join('');
+  if(lbl) lbl.innerHTML=`<span>${history[0].label}</span><span>${history[history.length-1].label}</span>`;
+}
+
+function renderChat(){
+  const box=document.getElementById('chat-msgs');
+  if(!box)return;
+  const me=(document.getElementById('nick').value||'').trim();
+  box.innerHTML=chatMessages.map(m=>{
+    const isMe=me&&m.nick===me;
+    return`<div style="align-self:${isMe?'flex-end':'flex-start'};max-width:86%">
+      ${!isMe?`<div class="msg-nick">${m.nick}</div>`:''}
+      <div class="msg ${isMe?'msg-me':'msg-other'}">${m.text}<span style="font-size:9px;opacity:.55;margin-left:6px">${m.time}</span></div>
+    </div>`;
+  }).join('');
+  box.scrollTop=box.scrollHeight;
+  document.getElementById('cnt').textContent=Math.floor(Math.random()*12)+3;
+}
+
+function sendMsg(){
+  const nick=(document.getElementById('nick').value||'').trim()||'익명';
+  const inp=document.getElementById('msg-inp');
+  const txt=inp.value.trim();
+  if(!txt)return;
+  const now=new Date();
+  chatMessages.push({nick,text:txt,time:String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')});
+  if(chatMessages.length>60)chatMessages.shift();
+  inp.value='';
+  renderChat();
+}
+
+function updateClock(){
+  const n=new Date();
+  const el=document.getElementById('clock');
+  if(el) el.textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
+}
+
+async function fetchMarketData(){
+  try{
+    const res=await fetch('/api/market');
+    if(!res.ok) throw new Error('API 오류');
+    return await res.json();
+  }catch(e){
+    console.warn('API 실패, 폴백 사용:', e.message);
+    return {
+      kospiChg:2.11, usdkrw:1518, usScore:34,
+      advancing:600, declining:300, newHigh:45, newLow:8,
+      foreignNet:1200, vkospi:18.5,
+      history:[58,62,65,70,68,71,72]
+    };
+  }
+}
+
+async function fetchAI(score, data){
+  const el=document.getElementById('ai-text');
+  if(!el)return;
+  el.innerHTML='<span class="spin"></span> AI 분석 중...';
+  try{
+    const res=await fetch('/api/ai-analysis',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({score, kospiChg:data.kospiChg, usdkrw:data.usdkrw})
+    });
+    const d=await res.json();
+    el.textContent=d.text||'AI 분석 일시 불가';
+  }catch(e){
+    el.textContent='AI 분석 일시 불가. 잠시 후 새로고침해 주세요.';
+  }
+}
+
+async function loadAll(){
+  const data=await fetchMarketData();
+  const {kospiChg, usdkrw, usScore, advancing, declining, newHigh, newLow, foreignNet, vkospi} = data;
+
+  scores={
+    momentum: Math.min(100, Math.max(0, 50 + (kospiChg||0) * 8)),
+    breadth:  Math.min(100, Math.max(0, (advancing/(advancing+declining||1))*100)),
+    strength: Math.min(100, Math.max(0, 50 + (newHigh-newLow)/(newHigh+newLow||1)*50)),
+    foreign:  Math.min(100, Math.max(0, 50 + Math.min(50, Math.max(-50, (foreignNet||0)/100)))),
+    vkospi:   Math.min(100, Math.max(0, 100 - Math.min(100, Math.max(0, ((vkospi||20)-10)*3)))),
+    fx:       Math.min(100, Math.max(0, usdkrw>1450 ? 35 : usdkrw>1400 ? 45 : usdkrw>1350 ? 55 : 65)),
+  };
+  const total=Math.round(Object.values(scores).reduce((a,b)=>a+b,0)/6);
+
+  const labels=['6/10','6/11','6/12','6/13','6/14','6/15','오늘'];
+  history=(data.history||[58,62,65,70,68,71,total]).map((s,i)=>({score:s,label:labels[i]||''}));
+  history[history.length-1].score=total;
+
+  updateGauge(total);
+  renderComps();
+  renderHistory();
+
+  const usSt=getState(usScore||34);
+  document.getElementById('us-s').textContent=usScore||34;
+  document.getElementById('us-s').style.color=usSt.col;
+  document.getElementById('us-st').textContent=usSt.short;
+  document.getElementById('us-st').style.color=usSt.col;
+
+  await fetchAI(total, data);
+}
+
+function isMarketHours(){
+  const kst=new Date(Date.now()+9*3600000);
+  const h=kst.getUTCHours(), m=kst.getUTCMinutes(), mins=h*60+m;
+  return mins>=540&&mins<=930;
+}
+
+renderChat();
+updateClock();
+setInterval(updateClock,1000);
+loadAll();
+setInterval(loadAll, isMarketHours()?5*60000:30*60000);
+</script>
+</body>
+</html>
