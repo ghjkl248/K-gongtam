@@ -179,23 +179,39 @@ async function fetchKospiMomentum() {
     const startDate = new Date(kstNow.getTime() - 400 * 86400000); // 영업일 기준 200일 확보를 위해 여유있게 400일 전부터
     const startTime = startDate.toISOString().slice(0, 10).replace(/-/g, '');
 
-    const r = await fetch(
-      `https://m.stock.naver.com/front-api/external/chart/domestic/info?symbol=KOSPI&requestType=1&startTime=${startTime}&endTime=${endTime}&timeframe=day`,
-      { headers: { Referer: 'https://finance.naver.com/sise/sise_index.naver?code=KOSPI' } }
-    );
-    if (!r.ok) throw new Error('naver chart fetch failed');
+    const url = `https://m.stock.naver.com/front-api/external/chart/domestic/info?symbol=KOSPI&requestType=1&startTime=${startTime}&endTime=${endTime}&timeframe=day`;
+
+    const r = await fetch(url, {
+      headers: {
+        Referer: 'https://finance.naver.com/sise/sise_index.naver?code=KOSPI',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+    });
+
+    if (!r.ok) {
+      const bodyText = await r.text().catch(() => '');
+      throw new Error(`naver chart fetch failed: status=${r.status}, body=${bodyText.slice(0, 200)}`);
+    }
 
     const rows = await r.json();
+
+    if (!Array.isArray(rows)) {
+      throw new Error(`naver chart response is not an array: ${JSON.stringify(rows).slice(0, 200)}`);
+    }
+
     // rows[0]은 헤더(['날짜','시가','고가','저가','종가','거래량','외국인소진율']), 그 이후가 실데이터
     const closes = rows.slice(1).map(row => row[4]).filter(v => typeof v === 'number');
-    if (closes.length < 125) throw new Error('insufficient history for 125-day MA');
+    if (closes.length < 125) {
+      throw new Error(`insufficient history for 125-day MA: rows.length=${rows.length}, closes.length=${closes.length}`);
+    }
 
     const latest = closes[closes.length - 1];
     const ma125 = closes.slice(-125).reduce((a, b) => a + b, 0) / 125;
     const ma125dev = (latest - ma125) / ma125 * 100; // %
 
     return { ma125dev, hadFallback: false };
-  } catch (_) {
+  } catch (e) {
+    console.error('market: fetchKospiMomentum 예외:', e.message);
     return { ma125dev: 0, hadFallback: true };
   }
 }
