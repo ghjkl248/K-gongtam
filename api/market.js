@@ -15,10 +15,16 @@ export default async function handler(req, res) {
       fetchScoreHistory(),
     ]);
 
-    const kospi   = kospiData.status   === 'fulfilled' ? kospiData.value   : { chg: 0, advancing: 500, declining: 400, newHigh: 30, newLow: 10, foreignNet: 0, vkospi: 20 };
+    const kospi   = kospiData.status   === 'fulfilled' ? kospiData.value   : { chg: 0, advancing: 500, declining: 400, newHigh: 30, newLow: 10, foreignNet: 0, vkospi: 20, hadFallback: true };
     const usdkrw  = usdkrwData.status  === 'fulfilled' ? usdkrwData.value  : 1400;
-    const usScore = usIndexData.status === 'fulfilled' ? usIndexData.value : 34;
+    const usIndex = usIndexData.status === 'fulfilled' ? usIndexData.value : { score: 34, hadFallback: true };
+    const usScore = usIndex.score;
     const history = historyData.status === 'fulfilled' ? historyData.value : [];
+
+    // 데이터 출처 중 하나라도 실패해서 추정값(폴백)을 썼는지 여부
+    const isEstimated = !!kospi.hadFallback
+      || usdkrwData.status !== 'fulfilled'
+      || !!usIndex.hadFallback;
 
     res.status(200).json({
       kospiChg:   kospi.chg,
@@ -31,6 +37,7 @@ export default async function handler(req, res) {
       usdkrw,
       usScore,
       history, // [{date:'2026-06-16', score:67}, ...] 최근 7일 (오늘 제외, 실데이터 없으면 빈 배열)
+      isEstimated, // true면 일부 데이터가 실시간 조회 실패로 추정값(폴백)임
       updatedAt: new Date().toISOString(),
     });
 
@@ -77,6 +84,7 @@ async function fetchKospi() {
 
   // 상승/하락 종목수 (네이버 마켓 인덱스)
   let advancing = 500, declining = 400, newHigh = 30, newLow = 10;
+  let hadFallback = false;
   try {
     const r2 = await fetch(
       'https://polling.finance.naver.com/api/realtime/domestic/index/market-index',
@@ -88,13 +96,17 @@ async function fetchKospi() {
     declining = parseInt(market.decliningCount || 400);
     newHigh   = parseInt(market.new52wHighCount || 30);
     newLow    = parseInt(market.new52wLowCount  || 10);
-  } catch (_) {}
+  } catch (_) {
+    hadFallback = true;
+  }
 
   // 외국인 순매수 (코스피 시장 전체, 억원 단위) + VKOSPI
   let foreignNet = 0, vkospi = 20;
   try {
     foreignNet = await fetchForeignNet();
-  } catch (_) {}
+  } catch (_) {
+    hadFallback = true;
+  }
   try {
     const r4 = await fetch(
       'https://polling.finance.naver.com/api/realtime/domestic/index/VKOSPI',
@@ -102,9 +114,11 @@ async function fetchKospi() {
     );
     const d4 = await r4.json();
     vkospi = parseFloat(d4.datas?.[0]?.closePrice || 20);
-  } catch (_) {}
+  } catch (_) {
+    hadFallback = true;
+  }
 
-  return { chg, advancing, declining, newHigh, newLow, foreignNet, vkospi };
+  return { chg, advancing, declining, newHigh, newLow, foreignNet, vkospi, hadFallback };
 }
 
 // ── 외국인 순매수 (코스피 시장 전체, 단위: 억원) ──
@@ -156,7 +170,7 @@ async function fetchUSIndex() {
     );
     const d = await r.json();
     const closes = d.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-    if (closes.length < 2) return 50;
+    if (closes.length < 2) return { score: 50, hadFallback: true };
     const latest = closes[closes.length - 1];
     const prev   = closes[closes.length - 2];
     const avg25  = closes.slice(-25).reduce((a,b)=>a+b,0)/25;
@@ -164,8 +178,8 @@ async function fetchUSIndex() {
     const mom    = (latest - avg25) / avg25 * 100;
     // 간단한 공포탐욕 추정
     const score  = Math.round(50 + chg * 5 + mom * 3);
-    return Math.min(100, Math.max(0, score));
+    return { score: Math.min(100, Math.max(0, score)), hadFallback: false };
   } catch (_) {
-    return 34;
+    return { score: 34, hadFallback: true };
   }
 }
