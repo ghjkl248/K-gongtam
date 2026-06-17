@@ -1,23 +1,24 @@
 // api/market.js — Vercel Serverless Function
 // 네이버 금융 + Yahoo Finance에서 실시간 데이터 수집
 
+const FIREBASE_URL = 'https://k-gongtam-default-rtdb.firebaseio.com';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=300'); // 5분 캐시
 
   try {
-    const [kospiData, usdkrwData, usIndexData] = await Promise.allSettled([
+    const [kospiData, usdkrwData, usIndexData, historyData] = await Promise.allSettled([
       fetchKospi(),
       fetchUSDKRW(),
       fetchUSIndex(),
+      fetchScoreHistory(),
     ]);
 
     const kospi   = kospiData.status   === 'fulfilled' ? kospiData.value   : { chg: 0, advancing: 500, declining: 400, newHigh: 30, newLow: 10, foreignNet: 0, vkospi: 20 };
     const usdkrw  = usdkrwData.status  === 'fulfilled' ? usdkrwData.value  : 1400;
     const usScore = usIndexData.status === 'fulfilled' ? usIndexData.value : 34;
-
-    // 7일 히스토리 (간소화: 실제 배포 시 DB 저장)
-    const history = [58, 62, 65, 70, 68, 71, 72];
+    const history = historyData.status === 'fulfilled' ? historyData.value : [];
 
     res.status(200).json({
       kospiChg:   kospi.chg,
@@ -29,12 +30,36 @@ export default async function handler(req, res) {
       vkospi:     kospi.vkospi,
       usdkrw,
       usScore,
-      history,
+      history, // [{date:'2026-06-16', score:67}, ...] 최근 7일 (오늘 제외, 실데이터 없으면 빈 배열)
       updatedAt: new Date().toISOString(),
     });
 
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+}
+
+// ── 최근 7일 점수 히스토리 (Firebase에서 조회) ──
+async function fetchScoreHistory() {
+  try {
+    // KST 기준 오늘 날짜 구하기
+    const kstNow = new Date(Date.now() + 9 * 3600000);
+    const days = [];
+    for (let i = 7; i >= 1; i--) {
+      const d = new Date(kstNow.getTime() - i * 86400000);
+      days.push(d.toISOString().slice(0, 10)); // YYYY-MM-DD
+    }
+
+    const r = await fetch(`${FIREBASE_URL}/scoreHistory.json`);
+    if (!r.ok) return [];
+    const all = await r.json();
+    if (!all) return [];
+
+    return days
+      .filter(date => all[date] != null)
+      .map(date => ({ date, score: Math.round(all[date]) }));
+  } catch (_) {
+    return [];
   }
 }
 
