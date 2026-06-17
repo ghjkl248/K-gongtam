@@ -420,7 +420,9 @@ async function loadAll(){
     momentum: Math.min(100, Math.max(0, 50 + (kospiChg||0) * 8)),
     breadth:  Math.min(100, Math.max(0, (advancing/(advancing+declining||1))*100)),
     strength: Math.min(100, Math.max(0, 50 + (newHigh-newLow)/(newHigh+newLow||1)*50)),
-    foreign:  Math.min(100, Math.max(0, 50 + Math.min(50, Math.max(-50, (foreignNet||0)/100)))),
+    // foreignNet: 코스피 시장 전체 외국인 순매수(억원). 통상 ±20,000억원 안팎에서 움직이므로
+    // 400으로 나눠 ±50점 범위에 매핑 (네이버 investorDealTrendDay 기준, 단위: 억원)
+    foreign:  Math.min(100, Math.max(0, 50 + Math.min(50, Math.max(-50, (foreignNet||0)/400)))),
     vkospi:   Math.min(100, Math.max(0, 100 - Math.min(100, Math.max(0, ((vkospi||20)-10)*3)))),
     fx:       Math.min(100, Math.max(0, usdkrw>1450 ? 35 : usdkrw>1400 ? 45 : usdkrw>1350 ? 55 : 65)),
   };
