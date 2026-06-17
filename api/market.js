@@ -193,7 +193,17 @@ async function fetchKospiMomentum() {
       throw new Error(`naver chart fetch failed: status=${r.status}, body=${bodyText.slice(0, 200)}`);
     }
 
-    const rows = await r.json();
+    // 이 엔드포인트는 표준 JSON이 아니라 홑따옴표를 쓰는 JS 리터럴 형식으로 응답함
+    // (예: [['날짜', '시가', ...], ["20260617", 8622.13, ...]]). 그대로 r.json()을 호출하면
+    // "Unexpected token '''" 같은 파싱 에러가 나므로, 텍스트로 받아 홑따옴표를 쌍따옴표로
+    // 치환한 뒤 JSON.parse함. 데이터가 날짜/숫자로만 구성되어 있어 이 치환은 안전함.
+    const rawText = await r.text();
+    let rows;
+    try {
+      rows = JSON.parse(rawText.replace(/'/g, '"'));
+    } catch (parseErr) {
+      throw new Error(`naver chart JSON parse failed after quote conversion: ${parseErr.message}, raw=${rawText.slice(0, 150)}`);
+    }
 
     if (!Array.isArray(rows)) {
       throw new Error(`naver chart response is not an array: ${JSON.stringify(rows).slice(0, 200)}`);
