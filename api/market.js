@@ -16,12 +16,23 @@ export default async function handler(req, res) {
       fetchKospiMomentum(),
     ]);
 
+    // 실패한 데이터 소스가 있으면 원인을 로그로 남김 (Vercel 함수 로그에서 확인 가능)
+    if (kospiData.status === 'rejected')    console.error('market: fetchKospi 실패:', kospiData.reason?.message);
+    if (usdkrwData.status === 'rejected')   console.error('market: fetchUSDKRW 실패:', usdkrwData.reason?.message);
+    if (usIndexData.status === 'rejected')  console.error('market: fetchUSIndex 실패:', usIndexData.reason?.message);
+    if (historyData.status === 'rejected')  console.error('market: fetchScoreHistory 실패:', historyData.reason?.message);
+    if (momentumData.status === 'rejected') console.error('market: fetchKospiMomentum 실패:', momentumData.reason?.message);
+
     const kospi    = kospiData.status   === 'fulfilled' ? kospiData.value   : { chg: 0, advancing: 500, declining: 400, newHigh: 30, newLow: 10, foreignNet: 0, vkospi: 20, hadFallback: true };
     const usdkrw   = usdkrwData.status  === 'fulfilled' ? usdkrwData.value  : 1400;
-    const usIndex  = usIndexData.status === 'fulfilled' ? usIndexData.value : { score: 34, hadFallback: true };
+    const usIndex  = usIndexData.status === 'fulfilled' ? usIndexData.value : { score: 40, hadFallback: true };
     const usScore  = usIndex.score;
     const history  = historyData.status === 'fulfilled' ? historyData.value : [];
     const momentum = momentumData.status === 'fulfilled' ? momentumData.value : { ma125dev: 0, hadFallback: true };
+
+    if (kospi.hadFallback)     console.error('market: fetchKospi 내부 일부 데이터 폴백 사용됨');
+    if (momentum.hadFallback)  console.error('market: fetchKospiMomentum 폴백 사용됨 (ma125dev=0)');
+    if (usIndex.hadFallback)   console.error('market: fetchUSIndex 폴백 사용됨');
 
     // 데이터 출처 중 하나라도 실패해서 추정값(폴백)을 썼는지 여부
     const isEstimated = !!kospi.hadFallback
@@ -46,6 +57,7 @@ export default async function handler(req, res) {
     });
 
   } catch (e) {
+    console.error('market: handler 전역 예외:', e.message, e.stack);
     res.status(500).json({ error: e.message });
   }
 }
@@ -206,6 +218,7 @@ async function fetchUSIndex() {
       'https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=30d',
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
+    if (!r.ok) throw new Error('yahoo GSPC fetch failed: status ' + r.status);
     const d = await r.json();
     const closes = d.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
     if (closes.length < 2) return { score: 50, hadFallback: true };
@@ -217,7 +230,10 @@ async function fetchUSIndex() {
     // 간단한 공포탐욕 추정
     const score  = Math.round(50 + chg * 5 + mom * 3);
     return { score: Math.min(100, Math.max(0, score)), hadFallback: false };
-  } catch (_) {
-    return { score: 34, hadFallback: true };
+  } catch (e) {
+    console.error('market: fetchUSIndex 예외:', e.message);
+    // CNN 공식 지수 폴백값 (자체 계산 실패 시). 실시간 CNN 값과는 다를 수 있으나
+    // 0(극단공포)이나 100(극단탐욕) 같은 극단치보다는 중립~약공포 쪽이 무난한 추정치임.
+    return { score: 40, hadFallback: true };
   }
 }
