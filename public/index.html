@@ -424,8 +424,10 @@ async function loadAll(){
   scores={
     // momentum: CNN 방식과 동일하게 '당일 등락률'이 아니라 '125일 이동평균 대비 괴리율'을 사용.
     // 사상최고치 경신처럼 추세선 위에서 계속 상승하는 상황을 정확히 탐욕 쪽으로 반영하기 위함.
-    // 통상 ±15% 괴리에서 ±50점에 도달하도록 3.5를 곱함 (괴리율 1%당 3.5점).
-    momentum: Math.min(100, Math.max(0, 50 + (ma125dev||0) * 3.5)),
+    // 데이터 출처: 네이버 코스피 차트(실측 검증됨). 2026년 코스피처럼 5개월간 2배 오른 비정상적
+    // 강세장에서는 괴리율이 +50%까지도 나오므로(정상 시장의 ±10~15%와 다름), 1%당 1.0점으로
+    // 완만하게 잡아 평소 시장과 극단적 장세 모두에서 변별력을 유지함.
+    momentum: Math.min(100, Math.max(0, 50 + (ma125dev||0) * 1.0)),
     breadth:  Math.min(100, Math.max(0, (advancing/(advancing+declining||1))*100)),
     strength: Math.min(100, Math.max(0, 50 + (newHigh-newLow)/(newHigh+newLow||1)*50)),
     // foreignNet: 코스피 시장 전체 외국인 순매수(억원). 실제 일별 관측값(약 -67,000~+50,000억원)을
