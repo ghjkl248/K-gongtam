@@ -64,9 +64,6 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 .leg-dot{width:8px;height:8px;border-radius:50%;margin:0 auto 2px}
 .leg-range{font-size:9px;color:var(--text2);display:block}
 .leg-name{font-size:10px;font-weight:600}
-.hist-bars{display:flex;align-items:flex-end;gap:3px;height:44px}
-.hist-b{flex:1;border-radius:3px 3px 0 0;min-height:3px;transition:height .4s}
-.hist-lbl{display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-top:3px}
 .ai-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:10px}
 .ai-lbl{font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:5px}
 .ai-text{font-size:13px;color:var(--text);line-height:1.7}
@@ -103,14 +100,15 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
     <div class="gauge-area">
       <svg viewBox="0 0 320 185" width="100%" style="max-width:340px;display:block;margin:0 auto;overflow:visible">
         <path d="M 40 160 A 120 120 0 0 1 280 160" fill="none" stroke="var(--border)" stroke-width="26"/>
-        <path d="M 40 160 A 120 120 0 0 1 75.15 75.15"   fill="none" stroke="#0F8A5F" stroke-width="24"/>
-        <path d="M 75.15 75.15 A 120 120 0 0 1 160 40"   fill="none" stroke="#8BC34A" stroke-width="24"/>
-        <path d="M 160 40 A 120 120 0 0 1 244.85 75.15"  fill="none" stroke="#F2C12E" stroke-width="24"/>
-        <path d="M 244.85 75.15 A 120 120 0 0 1 280 160" fill="none" stroke="#E8842C" stroke-width="24"/>
+        <path d="M 40 160 A 120 120 0 0 1 72.52 77.85"    fill="none" stroke="#0F8A5F" stroke-width="24"/>
+        <path d="M 72.52 77.85 A 120 120 0 0 1 137.51 42.13" fill="none" stroke="#8BC34A" stroke-width="24"/>
+        <path d="M 137.51 42.13 A 120 120 0 0 1 175.04 40.95" fill="none" stroke="#F2C12E" stroke-width="24"/>
+        <path d="M 175.04 40.95 A 120 120 0 0 1 242.15 72.52" fill="none" stroke="#E8842C" stroke-width="24"/>
+        <path d="M 242.15 72.52 A 120 120 0 0 1 280 160"   fill="none" stroke="#D6433C" stroke-width="24"/>
         <text x="16"  y="168" font-size="11" fill="var(--text2)" text-anchor="middle">0</text>
-        <text x="48"  y="62"  font-size="11" fill="var(--text2)" text-anchor="middle">25</text>
+        <text x="58"  y="68"  font-size="11" fill="var(--text2)" text-anchor="middle">25</text>
         <text x="160" y="18"  font-size="11" fill="var(--text2)" text-anchor="middle">50</text>
-        <text x="272" y="62"  font-size="11" fill="var(--text2)" text-anchor="middle">75</text>
+        <text x="262" y="68"  font-size="11" fill="var(--text2)" text-anchor="middle">75</text>
         <text x="304" y="168" font-size="11" fill="var(--text2)" text-anchor="middle">100</text>
         <!-- 바늘: score=50 → rotate=0(12시), score=0 → rotate=-90(9시), score=100 → rotate=+90(3시) -->
         <g id="ndl" transform="rotate(-90 160 160)">
@@ -151,17 +149,15 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 
   <!-- 구성 지표 -->
   <div class="card">
-    <div class="sec-title">구성 지표 (6개)</div>
+    <div class="sec-title">구성 지표 (4개)</div>
     <div class="comp-grid" id="comp-grid">
       <div style="grid-column:span 2;text-align:center;padding:16px;color:var(--text2);font-size:12px"><span class="spin"></span></div>
     </div>
   </div>
 
-  <!-- 7일 히스토리 -->
+  <!-- 참고 자료 (공탐지수 계산에는 미반영, 문구만 표시) -->
   <div class="card">
-    <div class="sec-title">최근 7일 추이</div>
-    <div class="hist-bars" id="hist-bars"></div>
-    <div class="hist-lbl" id="hist-lbl"></div>
+    <div class="sec-title" style="margin-bottom:0">참고 자료 : VKOSPI, 외인 수급, 원달러 환율 등</div>
   </div>
 
   <!-- 범례 -->
@@ -207,15 +203,13 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 
 <script>
 const COMPS=[
-  {key:'momentum',name:'모멘텀',   desc:'KOSPI vs 이동평균'},
+  {key:'momentum',name:'이격도',   desc:'KOSPI vs 125일선'},
   {key:'breadth', name:'시장폭',   desc:'상승/하락 비율'},
   {key:'strength',name:'주가강도', desc:'52주 신고가/저가'},
-  {key:'foreign', name:'외인수급', desc:'외국인 순매수'},
   {key:'vkospi',  name:'변동성',   desc:'VKOSPI 역수'},
-  {key:'fx',      name:'환율',     desc:'원달러 안전자산'},
 ];
 
-let scores={}, history=[], chatMessages=[];
+let scores={}, chatMessages=[];
 let isSending=false; // 메시지 전송 중에는 자동 새로고침 건너뜀
 
 // ── Firebase 실시간 대화방 ──
@@ -256,8 +250,16 @@ async function saveMsg(msg){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(msg)
     });
-    if(!r.ok) console.warn('Firebase 저장 실패:', r.status);
-  }catch(e){console.warn('저장 실패',e.message);}
+    if(!r.ok){
+      const body=await r.text().catch(()=>'');
+      console.warn('Firebase 저장 실패:', r.status, body);
+      return false;
+    }
+    return true;
+  }catch(e){
+    console.warn('저장 실패',e.message);
+    return false;
+  }
 }
 
 // 20초마다 새 메시지 자동 로드 (전송 중이 아닐 때만)
@@ -305,20 +307,6 @@ function renderComps(){
   }).join('');
 }
 
-function renderHistory(){
-  const bars=document.getElementById('hist-bars');
-  const lbl=document.getElementById('hist-lbl');
-  if(!bars||!history.length)return;
-  const max=Math.max(...history.map(h=>h.score));
-  bars.innerHTML=history.map((h,i)=>{
-    const col=barCol(h.score);
-    const pct=Math.round((h.score/max)*100);
-    const last=i===history.length-1;
-    return`<div class="hist-b" title="${h.label}: ${h.score}" style="background:${col};height:${pct}%;${last?'outline:2px solid var(--text);outline-offset:-1px':''}"></div>`;
-  }).join('');
-  if(lbl) lbl.innerHTML=`<span>${history[0].label}</span><span>${history[history.length-1].label}</span>`;
-}
-
 function renderChat(){
   const box=document.getElementById('chat-msgs');
   if(!box)return;
@@ -353,7 +341,9 @@ function sendMsg(){
   if(chatMessages.length>60)chatMessages.shift();
   inp.value='';
   renderChat();
-  saveMsg(msg).finally(()=>{
+  saveMsg(msg).then(ok=>{
+    if(!ok) alert('메시지 저장에 실패했습니다. 새로고침하면 이 메시지가 사라질 수 있어요. (개발자도구 콘솔에서 자세한 원인 확인 가능)');
+  }).finally(()=>{
     setTimeout(()=>{isSending=false;},3000); // 3초간 자동갱신 보류
   });
 }
@@ -372,7 +362,7 @@ async function fetchMarketData(){
   }catch(e){
     console.warn('API 실패, 폴백 사용:', e.message);
     return {
-      kospiChg:2.11, ma125dev:0, usdkrw:1518, usScore:34,
+      kospiChg:2.11, ma125dev:0, usdkrw:1518, usScore:40,
       advancing:600, declining:300, newHigh:45, newLow:8,
       foreignNet:1200, vkospi:18.5,
       history:[], // API 자체가 죽었으니 과거 히스토리도 알 수 없음 → 오늘 점수만 표시
@@ -398,12 +388,6 @@ async function fetchAI(score, data){
   }
 }
 
-function formatDateLabel(dateStr){
-  // 'YYYY-MM-DD' → 'M/D'
-  const parts=dateStr.split('-');
-  return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
-}
-
 async function saveTodayScore(score){
   try{
     await fetch('/api/save-score',{
@@ -421,41 +405,42 @@ async function loadAll(){
   const badge=document.getElementById('estimate-badge');
   if(badge) badge.style.display = data.isEstimated ? 'block' : 'none';
 
-  scores={
-    // momentum: CNN 방식과 동일하게 '당일 등락률'이 아니라 '125일 이동평균 대비 괴리율'을 사용.
-    // 사상최고치 경신처럼 추세선 위에서 계속 상승하는 상황을 정확히 탐욕 쪽으로 반영하기 위함.
-    // 데이터 출처: 네이버 코스피 차트(실측 검증됨). 2026년 코스피처럼 5개월간 2배 오른 비정상적
-    // 강세장에서는 괴리율이 +50%까지도 나오므로(정상 시장의 ±10~15%와 다름), 1%당 1.0점으로
-    // 완만하게 잡아 평소 시장과 극단적 장세 모두에서 변별력을 유지함.
-    momentum: Math.min(100, Math.max(0, 50 + (ma125dev||0) * 1.0)),
-    breadth:  Math.min(100, Math.max(0, (advancing/(advancing+declining||1))*100)),
-    strength: Math.min(100, Math.max(0, 50 + (newHigh-newLow)/(newHigh+newLow||1)*50)),
-    // foreignNet: 코스피 시장 전체 외국인 순매수(억원). 실제 일별 관측값(약 -67,000~+50,000억원)을
-    // 폭넓게 반영하기 위해 1200으로 나눠 ±50점 범위에 매핑 (네이버 investorDealTrendDay 기준, 단위: 억원)
-    foreign:  Math.min(100, Math.max(0, 50 + Math.min(50, Math.max(-50, (foreignNet||0)/1200)))),
-    vkospi:   Math.min(100, Math.max(0, 100 - Math.min(100, Math.max(0, ((vkospi||20)-10)*3)))),
-    // usdkrw: 원달러 환율. 1400원을 중립 기준점(50점)으로 잡고 100원당 25점씩 선형으로 변화.
-    // 환율 상승(원화 약세)은 공포 쪽, 하락(원화 강세)은 안정/탐욕 쪽으로 반영.
-    fx:       Math.min(100, Math.max(0, 50 - ((usdkrw||1400)-1400)/4)),
-  };
-  const total=Math.round(Object.values(scores).reduce((a,b)=>a+b,0)/6);
+  // ── 공탐지수 핵심 4개 지표 (이격도/시장폭/주가강도/변동성) ──
+  // 이격도(momentum): CNN 방식처럼 '당일 등락률'이 아니라 'KOSPI가 125일 이동평균 대비
+  // 얼마나 떨어져 있는가'를 사용. tanh로 매끄럽게 압축해 극단치에서도 항상 0~100 안에 머물게 함.
+  const momentumScore = Math.min(100, Math.max(0, 50 + 50*Math.tanh((ma125dev||0)/15)));
+  const breadthScore  = Math.min(100, Math.max(0, (advancing/(advancing+declining||1))*100));
+  const strengthScore = Math.min(100, Math.max(0, 50 + (newHigh-newLow)/(newHigh+newLow||1)*50));
+  const vkospiScore   = Math.min(100, Math.max(0, 100 - Math.min(100, Math.max(0, ((vkospi||20)-10)*3))));
 
-  // Firebase에서 가져온 실제 과거 점수 + 오늘 계산값
-  const pastHistory=(data.history||[]).map(h=>({score:h.score,label:formatDateLabel(h.date)}));
-  history=[...pastHistory,{score:total,label:'오늘'}];
+  // 이격도 동적 가중치: 이격도(|ma125dev|)가 클수록 momentum의 비중이 커지고,
+  // 0%에 가까울수록(추세선 위/아래로 벗어나지 않은 평범한 장) 4개 지표가 균등(25%씩)하게 반영됨.
+  // base=25%(이격도 0일 때) ~ maxW=47%(이격도 ±45% 이상일 때)까지 선형으로 증가.
+  const absDev=Math.abs(ma125dev||0);
+  const wBase=0.25, wMax=0.47, wSatPoint=45;
+  const wMomentum = wBase + (wMax-wBase) * Math.min(1, absDev/wSatPoint);
+  const wRest = (1-wMomentum)/3;
+
+  scores={ momentum:momentumScore, breadth:breadthScore, strength:strengthScore, vkospi:vkospiScore };
+  const total=Math.round(
+    momentumScore*wMomentum + breadthScore*wRest + strengthScore*wRest + vkospiScore*wRest
+  );
+
+  // 참고: 외인수급(foreignNet)/환율(usdkrw)은 공탐지수 계산에 반영하지 않음.
+  // 외국인 순매도가 반드시 악재는 아니며(차익실현성 리밸런싱일 수 있음), 환율도 외국인 수급·
+  // 인플레이션 등 복합 요인의 결과라 공탐지수의 직접 원인으로 보기 어렵기 때문. (화면엔 문구만 표시)
 
   updateGauge(total);
   renderComps();
-  renderHistory();
 
-  const usSt=getState(usScore||34);
-  document.getElementById('us-s').textContent=usScore||34;
+  const usSt=getState(usScore||40);
+  document.getElementById('us-s').textContent=usScore||40;
   document.getElementById('us-s').style.color=usSt.col;
   document.getElementById('us-st').textContent=usSt.short;
   document.getElementById('us-st').style.color=usSt.col;
 
   await fetchAI(total, data);
-  await saveTodayScore(total); // 오늘 점수를 히스토리에 기록 (다음 조회부터 반영)
+  await saveTodayScore(total); // 오늘 점수를 히스토리에 기록 (UI에는 표시하지 않지만 데이터는 계속 축적)
 }
 
 function isMarketHours(){
