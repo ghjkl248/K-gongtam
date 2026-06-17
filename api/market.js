@@ -90,14 +90,12 @@ async function fetchKospi() {
     newLow    = parseInt(market.new52wLowCount  || 10);
   } catch (_) {}
 
-  // 외국인 순매수 (억원)
+  // 외국인 순매수 (코스피 시장 전체, 억원 단위) + VKOSPI
   let foreignNet = 0, vkospi = 20;
   try {
-    const r3 = await fetch(
-      'https://finance.naver.com/sise/sise_index.naver?code=KOSPI',
-      { headers: { Referer: 'https://finance.naver.com/' } }
-    );
-    // VKOSPI는 별도 종목코드로 조회
+    foreignNet = await fetchForeignNet();
+  } catch (_) {}
+  try {
     const r4 = await fetch(
       'https://polling.finance.naver.com/api/realtime/domestic/index/VKOSPI',
       { headers: { Referer: 'https://finance.naver.com/' } }
@@ -107,6 +105,35 @@ async function fetchKospi() {
   } catch (_) {}
 
   return { chg, advancing, declining, newHigh, newLow, foreignNet, vkospi };
+}
+
+// ── 외국인 순매수 (코스피 시장 전체, 단위: 억원) ──
+// 네이버 금융 "투자자별 매매 동향" 페이지가 쓰는 비공개 HTML 엔드포인트를 파싱.
+// sosok 파라미터를 비워두면 코스피 기준으로 응답됨.
+async function fetchForeignNet() {
+  const kstNow = new Date(Date.now() + 9 * 3600000);
+  const bizdate = kstNow.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+
+  const r = await fetch(
+    `https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate=${bizdate}&sosok=`,
+    { headers: { Referer: 'https://finance.naver.com/' } }
+  );
+  if (!r.ok) throw new Error('investorDealTrendDay fetch failed');
+
+  const html = await r.text();
+  // 'date2' 클래스 td로 시작하는 첫 번째(최신) 데이터 행만 사용
+  const rowMatch = html.match(/<tr>\s*<td class="date2">([^<]+)<\/td>([\s\S]*?)<\/tr>/);
+  if (!rowMatch) throw new Error('investorDealTrendDay parse failed: no row found');
+
+  const cells = [...rowMatch[2].matchAll(/<td[^>]*>([^<]*)<\/td>/g)].map(m => m[1].trim());
+  // cells[0]=개인, cells[1]=외국인, cells[2]=기관계, ...
+  const foreignNetStr = cells[1];
+  if (foreignNetStr == null || foreignNetStr === '') throw new Error('investorDealTrendDay parse failed: empty value');
+
+  const foreignNet = parseFloat(foreignNetStr.replace(/,/g, ''));
+  if (Number.isNaN(foreignNet)) throw new Error('investorDealTrendDay parse failed: NaN');
+
+  return foreignNet; // 억원 단위, 음수면 순매도
 }
 
 // ── 원달러 환율 (Yahoo Finance) ──
