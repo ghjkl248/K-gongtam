@@ -158,14 +158,24 @@ async function fetchForeignNet() {
 // CNN Fear & Greed Index의 Market Momentum 지표를 그대로 차용.
 // 당일 등락률이 아니라 "지금 가격이 최근 6개월 추세선 대비 얼마나 높은가"를 측정하므로
 // 사상 최고치 경신처럼 추세 위에서 계속 상승하는 상황을 정확히 포착함.
+// 데이터 출처: 네이버 증권 모바일 차트 API (finance.naver.com 코스피 차트가 실제로 사용하는 엔드포인트,
+// CORS 허용 + 일별 시가/고가/저가/종가 1년치 제공, 인증 불필요)
 async function fetchKospiMomentum() {
   try {
+    const kstNow = new Date(Date.now() + 9 * 3600000);
+    const endTime = kstNow.toISOString().slice(0, 10).replace(/-/g, '');
+    const startDate = new Date(kstNow.getTime() - 400 * 86400000); // 영업일 기준 200일 확보를 위해 여유있게 400일 전부터
+    const startTime = startDate.toISOString().slice(0, 10).replace(/-/g, '');
+
     const r = await fetch(
-      'https://query1.finance.yahoo.com/v8/finance/chart/%5EKS11?interval=1d&range=200d',
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      `https://m.stock.naver.com/front-api/external/chart/domestic/info?symbol=KOSPI&requestType=1&startTime=${startTime}&endTime=${endTime}&timeframe=day`,
+      { headers: { Referer: 'https://finance.naver.com/sise/sise_index.naver?code=KOSPI' } }
     );
-    const d = await r.json();
-    const closes = (d.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+    if (!r.ok) throw new Error('naver chart fetch failed');
+
+    const rows = await r.json();
+    // rows[0]은 헤더(['날짜','시가','고가','저가','종가','거래량','외국인소진율']), 그 이후가 실데이터
+    const closes = rows.slice(1).map(row => row[4]).filter(v => typeof v === 'number');
     if (closes.length < 125) throw new Error('insufficient history for 125-day MA');
 
     const latest = closes[closes.length - 1];
