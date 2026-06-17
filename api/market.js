@@ -8,26 +8,30 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=300'); // 5분 캐시
 
   try {
-    const [kospiData, usdkrwData, usIndexData, historyData] = await Promise.allSettled([
+    const [kospiData, usdkrwData, usIndexData, historyData, momentumData] = await Promise.allSettled([
       fetchKospi(),
       fetchUSDKRW(),
       fetchUSIndex(),
       fetchScoreHistory(),
+      fetchKospiMomentum(),
     ]);
 
-    const kospi   = kospiData.status   === 'fulfilled' ? kospiData.value   : { chg: 0, advancing: 500, declining: 400, newHigh: 30, newLow: 10, foreignNet: 0, vkospi: 20, hadFallback: true };
-    const usdkrw  = usdkrwData.status  === 'fulfilled' ? usdkrwData.value  : 1400;
-    const usIndex = usIndexData.status === 'fulfilled' ? usIndexData.value : { score: 34, hadFallback: true };
-    const usScore = usIndex.score;
-    const history = historyData.status === 'fulfilled' ? historyData.value : [];
+    const kospi    = kospiData.status   === 'fulfilled' ? kospiData.value   : { chg: 0, advancing: 500, declining: 400, newHigh: 30, newLow: 10, foreignNet: 0, vkospi: 20, hadFallback: true };
+    const usdkrw   = usdkrwData.status  === 'fulfilled' ? usdkrwData.value  : 1400;
+    const usIndex  = usIndexData.status === 'fulfilled' ? usIndexData.value : { score: 34, hadFallback: true };
+    const usScore  = usIndex.score;
+    const history  = historyData.status === 'fulfilled' ? historyData.value : [];
+    const momentum = momentumData.status === 'fulfilled' ? momentumData.value : { ma125dev: 0, hadFallback: true };
 
     // 데이터 출처 중 하나라도 실패해서 추정값(폴백)을 썼는지 여부
     const isEstimated = !!kospi.hadFallback
       || usdkrwData.status !== 'fulfilled'
-      || !!usIndex.hadFallback;
+      || !!usIndex.hadFallback
+      || !!momentum.hadFallback;
 
     res.status(200).json({
       kospiChg:   kospi.chg,
+      ma125dev:   momentum.ma125dev, // 코스피 현재가의 125일 이동평균 대비 괴리율(%). 사상최고치/추세 반영용 모멘텀 지표
       advancing:  kospi.advancing,
       declining:  kospi.declining,
       newHigh:    kospi.newHigh,
@@ -148,6 +152,30 @@ async function fetchForeignNet() {
   if (Number.isNaN(foreignNet)) throw new Error('investorDealTrendDay parse failed: NaN');
 
   return foreignNet; // 억원 단위, 음수면 순매도
+}
+
+// ── 코스피 모멘텀 (CNN 방식: 125일 이동평균 대비 괴리율) ──
+// CNN Fear & Greed Index의 Market Momentum 지표를 그대로 차용.
+// 당일 등락률이 아니라 "지금 가격이 최근 6개월 추세선 대비 얼마나 높은가"를 측정하므로
+// 사상 최고치 경신처럼 추세 위에서 계속 상승하는 상황을 정확히 포착함.
+async function fetchKospiMomentum() {
+  try {
+    const r = await fetch(
+      'https://query1.finance.yahoo.com/v8/finance/chart/%5EKS11?interval=1d&range=200d',
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const d = await r.json();
+    const closes = (d.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+    if (closes.length < 125) throw new Error('insufficient history for 125-day MA');
+
+    const latest = closes[closes.length - 1];
+    const ma125 = closes.slice(-125).reduce((a, b) => a + b, 0) / 125;
+    const ma125dev = (latest - ma125) / ma125 * 100; // %
+
+    return { ma125dev, hadFallback: false };
+  } catch (_) {
+    return { ma125dev: 0, hadFallback: true };
+  }
 }
 
 // ── 원달러 환율 (Yahoo Finance) ──
