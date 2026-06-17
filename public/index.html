@@ -48,7 +48,8 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 .score-d{font-size:12px;color:var(--text2);line-height:1.5}
 .comp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .comp-item{background:var(--bg);border-radius:10px;padding:8px 10px}
-.comp-name{font-size:10px;color:var(--text2);margin-bottom:4px}
+.comp-name{font-size:10px;color:var(--text2);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.comp-state{font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;white-space:nowrap}
 .comp-bar-bg{height:3px;background:var(--border);border-radius:2px;margin-bottom:3px}
 .comp-bar{height:100%;border-radius:2px;transition:width .5s}
 .comp-val{font-size:12px;font-weight:600}
@@ -299,8 +300,9 @@ function renderComps(){
   g.innerHTML=COMPS.map(c=>{
     const s=Math.round(scores[c.key]||50);
     const col=barCol(s);
+    const st=getState(s); // 5단계 라벨(극단공포~극단탐욕)을 구성지표 점수에도 동일하게 적용
     return`<div class="comp-item">
-      <div class="comp-name">${c.name}</div>
+      <div class="comp-name"><span>${c.name}</span><span class="comp-state" style="color:${st.col};background:${st.col}1A">${st.short}</span></div>
       <div class="comp-bar-bg"><div class="comp-bar" style="width:${s}%;background:${col}"></div></div>
       <div class="comp-val" style="color:${col}">${s}<span style="font-size:9px;color:var(--text2);font-weight:400"> ${c.desc}</span></div>
     </div>`;
