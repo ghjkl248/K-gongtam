@@ -374,7 +374,7 @@ async function fetchMarketData(){
       kospiChg:2.11, usdkrw:1518, usScore:34,
       advancing:600, declining:300, newHigh:45, newLow:8,
       foreignNet:1200, vkospi:18.5,
-      history:[58,62,65,70,68,71,72]
+      history:[] // API 자체가 죽었으니 과거 히스토리도 알 수 없음 → 오늘 점수만 표시
     };
   }
 }
@@ -396,6 +396,22 @@ async function fetchAI(score, data){
   }
 }
 
+function formatDateLabel(dateStr){
+  // 'YYYY-MM-DD' → 'M/D'
+  const parts=dateStr.split('-');
+  return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+}
+
+async function saveTodayScore(score){
+  try{
+    await fetch('/api/save-score',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({score})
+    });
+  }catch(e){console.warn('점수 저장 실패:',e.message);}
+}
+
 async function loadAll(){
   const data=await fetchMarketData();
   const {kospiChg, usdkrw, usScore, advancing, declining, newHigh, newLow, foreignNet, vkospi} = data;
@@ -410,9 +426,9 @@ async function loadAll(){
   };
   const total=Math.round(Object.values(scores).reduce((a,b)=>a+b,0)/6);
 
-  const labels=['6/10','6/11','6/12','6/13','6/14','6/15','오늘'];
-  history=(data.history||[58,62,65,70,68,71,total]).map((s,i)=>({score:s,label:labels[i]||''}));
-  history[history.length-1].score=total;
+  // Firebase에서 가져온 실제 과거 점수 + 오늘 계산값
+  const pastHistory=(data.history||[]).map(h=>({score:h.score,label:formatDateLabel(h.date)}));
+  history=[...pastHistory,{score:total,label:'오늘'}];
 
   updateGauge(total);
   renderComps();
@@ -425,6 +441,7 @@ async function loadAll(){
   document.getElementById('us-st').style.color=usSt.col;
 
   await fetchAI(total, data);
+  await saveTodayScore(total); // 오늘 점수를 히스토리에 기록 (다음 조회부터 반영)
 }
 
 function isMarketHours(){
