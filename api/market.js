@@ -237,8 +237,37 @@ async function fetchUSDKRW() {
   return price ? Math.round(price) : 1400;
 }
 
-// ── 미국 공포탐욕지수 (CNN 대체: S&P500 기반 자체 계산) ──
+// ── 미국 공포탐욕지수 (CNN 실제 지수 직접 조회) ──
+// CNN이 edition.cnn.com/markets/fear-and-greed 페이지 자체에서 차트를 그릴 때 호출하는
+// 비공식(unofficial) 데이터 엔드포인트. 인증/API 키 불필요, CORS 허용됨.
+// 응답의 fear_and_greed.score가 CNN 웹사이트에 표시되는 "오늘" 점수와 동일한 값임
+// (반올림 전 소수값이라 화면 표시 시 Math.round 필요).
+// 참고: 이 URL은 CNN이 공식 문서화한 API가 아니라 웹페이지가 내부적으로 쓰는 엔드포인트이므로,
+// CNN이 추후 구조를 바꾸면 폴백(아래 catch 블록)으로 전환됨.
 async function fetchUSIndex() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const r = await fetch(
+      `https://production.dataviz.cnn.io/index/fearandgreed/graphdata/${today}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
+    );
+    if (!r.ok) throw new Error('CNN fear&greed fetch failed: status ' + r.status);
+    const d = await r.json();
+    const raw = d?.fear_and_greed?.score;
+    if (typeof raw !== 'number' || Number.isNaN(raw)) {
+      throw new Error('CNN fear&greed response missing score: ' + JSON.stringify(d).slice(0, 200));
+    }
+    const score = Math.round(Math.min(100, Math.max(0, raw)));
+    return { score, hadFallback: false };
+  } catch (e) {
+    console.error('market: fetchUSIndex 예외 (CNN 직접 조회 실패, S&P500 추정으로 폴백):', e.message);
+    return await fetchUSIndexFallback();
+  }
+}
+
+// CNN 엔드포인트가 막히거나 구조가 바뀌었을 때만 쓰는 2차 폴백.
+// S&P500 가격 변동 기반 자체 추정치이며, 실제 CNN 지수와는 차이가 날 수 있음.
+async function fetchUSIndexFallback() {
   try {
     const r = await fetch(
       'https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=30d',
@@ -253,13 +282,10 @@ async function fetchUSIndex() {
     const avg25  = closes.slice(-25).reduce((a,b)=>a+b,0)/25;
     const chg    = (latest - prev) / prev * 100;
     const mom    = (latest - avg25) / avg25 * 100;
-    // 간단한 공포탐욕 추정
     const score  = Math.round(50 + chg * 5 + mom * 3);
-    return { score: Math.min(100, Math.max(0, score)), hadFallback: false };
+    return { score: Math.min(100, Math.max(0, score)), hadFallback: true };
   } catch (e) {
-    console.error('market: fetchUSIndex 예외:', e.message);
-    // CNN 공식 지수 폴백값 (자체 계산 실패 시). 실시간 CNN 값과는 다를 수 있으나
-    // 0(극단공포)이나 100(극단탐욕) 같은 극단치보다는 중립~약공포 쪽이 무난한 추정치임.
+    console.error('market: fetchUSIndexFallback 예외:', e.message);
     return { score: 40, hadFallback: true };
   }
 }
