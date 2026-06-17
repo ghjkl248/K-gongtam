@@ -215,40 +215,52 @@ const COMPS=[
 ];
 
 let scores={}, history=[], chatMessages=[];
+let isSending=false; // 메시지 전송 중에는 자동 새로고침 건너뜀
 
 // ── Firebase 실시간 대화방 ──
 const FIREBASE_URL='https://k-gongtam-default-rtdb.firebaseio.com';
 
 async function loadChat(){
+  if(isSending)return; // 전송 중이면 자동 갱신 건너뛰기 (메시지 사라짐 방지)
   try{
     const r=await fetch(`${FIREBASE_URL}/messages.json?orderBy="ts"&limitToLast=50`);
+    if(!r.ok) throw new Error('fetch failed');
     const d=await r.json();
-    if(!d){chatMessages=[];renderChat();return;}
-    chatMessages=Object.values(d).sort((a,b)=>a.ts-b.ts);
+    if(!d){
+      // DB는 비어있지만 연결은 정상 → 빈 배열 유지 (기본 메시지 안 보여줌)
+      return;
+    }
+    const loaded=Object.values(d)
+      .filter(m=>m&&typeof m==='object'&&m.text&&m.nick) // undefined 방지: 유효한 메시지만
+      .sort((a,b)=>(a.ts||0)-(b.ts||0));
+    chatMessages=loaded;
     renderChat();
   }catch(e){
-    // Firebase 미연결 시 기본 메시지
-    chatMessages=[
-      {nick:'주식고수99',text:'오늘 코스피 엄청 강하네요! 탐욕 구간 진입',time:'10:23',ts:1},
-      {nick:'반도체덕후',text:'삼성전자 외인 순매수 계속 들어오는중',time:'11:05',ts:2},
-      {nick:'개미투자자',text:'K-공탐지수 보고 타점 잡기 좋네요',time:'12:41',ts:3},
-    ];
-    renderChat();
+    console.warn('Firebase 연결 실패, 로컬 모드:',e.message);
+    if(chatMessages.length===0){
+      chatMessages=[
+        {nick:'주식고수99',text:'오늘 코스피 엄청 강하네요! 탐욕 구간 진입',time:'10:23',ts:1},
+        {nick:'반도체덕후',text:'삼성전자 외인 순매수 계속 들어오는중',time:'11:05',ts:2},
+        {nick:'개미투자자',text:'K-공탐지수 보고 타점 잡기 좋네요',time:'12:41',ts:3},
+      ];
+      renderChat();
+    }
   }
 }
 
 async function saveMsg(msg){
   try{
-    await fetch(`${FIREBASE_URL}/messages.json`,{
+    const r=await fetch(`${FIREBASE_URL}/messages.json`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(msg)
     });
-  }catch(e){console.log('저장 실패',e);}
+    if(!r.ok) console.warn('Firebase 저장 실패:', r.status);
+  }catch(e){console.warn('저장 실패',e.message);}
 }
 
-// 30초마다 새 메시지 자동 로드
-setInterval(loadChat, 30000);
+// 20초마다 새 메시지 자동 로드 (전송 중이 아닐 때만)
+setInterval(loadChat, 20000);
 
 function getState(s){
   if(s<=24)return{label:'극단 공포',short:'극단공포',col:'#E24B4A',eng:'Extreme Fear',desc:'극도의 공포 상태입니다. 역발상 매수 기회를 검토해 보세요.'};
@@ -310,15 +322,21 @@ function renderChat(){
   const box=document.getElementById('chat-msgs');
   if(!box)return;
   const me=(document.getElementById('nick').value||'').trim();
-  box.innerHTML=chatMessages.map(m=>{
-    const isMe=me&&m.nick===me;
-    return`<div style="align-self:${isMe?'flex-end':'flex-start'};max-width:86%">
-      ${!isMe?`<div class="msg-nick">${m.nick}</div>`:''}
-      <div class="msg ${isMe?'msg-me':'msg-other'}">${m.text}<span style="font-size:9px;opacity:.55;margin-left:6px">${m.time}</span></div>
-    </div>`;
-  }).join('');
+  box.innerHTML=chatMessages
+    .filter(m=>m&&m.text&&m.nick) // 빈 데이터 필터링
+    .map(m=>{
+      const isMe=me&&m.nick===me;
+      const safeText=m.text||'';
+      const safeTime=m.time||'';
+      const safeNick=m.nick||'익명';
+      return`<div style="align-self:${isMe?'flex-end':'flex-start'};max-width:86%">
+        ${!isMe?`<div class="msg-nick">${safeNick}</div>`:''}
+        <div class="msg ${isMe?'msg-me':'msg-other'}">${safeText}<span style="font-size:9px;opacity:.55;margin-left:6px">${safeTime}</span></div>
+      </div>`;
+    }).join('');
   box.scrollTop=box.scrollHeight;
-  document.getElementById('cnt').textContent=Math.floor(Math.random()*12)+3;
+  const cntEl=document.getElementById('cnt');
+  if(cntEl) cntEl.textContent=Math.floor(Math.random()*12)+3;
 }
 
 function sendMsg(){
@@ -329,11 +347,14 @@ function sendMsg(){
   const now=new Date();
   const time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   const msg={nick,text:txt,time,ts:Date.now()};
+  isSending=true;
   chatMessages.push(msg);
   if(chatMessages.length>60)chatMessages.shift();
   inp.value='';
   renderChat();
-  saveMsg(msg); // Firebase에 영구 저장
+  saveMsg(msg).finally(()=>{
+    setTimeout(()=>{isSending=false;},3000); // 3초간 자동갱신 보류
+  });
 }
 
 function updateClock(){
