@@ -23,6 +23,10 @@
 <title>K-공탐지수</title>
 <!-- Google AdSense -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4396806527115932" crossorigin="anonymous"></script>
+<!-- Firebase SDK: 실시간 접속자 수(presence) 표시용. REST API와 달리 onDisconnect를 지원해서
+     브라우저가 닫히거나 네트워크가 끊기면 서버가 자동으로 접속자 목록에서 제거해줌 -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <link rel="manifest" href="/manifest.json">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -215,11 +219,49 @@ let isSending=false; // 메시지 전송 중에는 자동 새로고침 건너뜀
 
 // ── Firebase 실시간 대화방 ──
 const FIREBASE_URL='https://k-gongtam-default-rtdb.firebaseio.com';
+const MAX_MESSAGES=100; // 대화방에 보관할 최대 메시지 수 (서버의 send-message.js가 초과분을 정리함)
+
+// ── 실시간 접속자 수 (Firebase presence) ──
+// presence/{내고유ID} 경로에 내 접속 사실을 기록하고, onDisconnect()로 "연결이 끊기면
+// 이 노드를 지워줘"라고 서버에 미리 예약해둠. 브라우저를 닫거나 네트워크가 끊기면
+// 클라이언트 코드 실행 없이도 Firebase 서버가 자동으로 지워주므로 정확한 동시 접속자 수가 됨.
+let presenceRef=null;
+
+function initPresence(){
+  try{
+    if(!firebase.apps.length){
+      firebase.initializeApp({databaseURL:FIREBASE_URL});
+    }
+    const db=firebase.database();
+    const myId='visitor_'+Math.random().toString(36).slice(2,10)+'_'+Date.now();
+    presenceRef=db.ref('presence/'+myId);
+
+    // 서버와 연결이 살아있는지 보는 특수 경로. true가 되는 시점에만 내 presence를 등록해야
+    // 재연결 시 중복 등록이나 끊긴 접속이 안 지워지는 문제를 막을 수 있음
+    db.ref('.info/connected').on('value',(snap)=>{
+      if(snap.val()===true){
+        presenceRef.onDisconnect().remove().then(()=>{
+          presenceRef.set({connectedAt:firebase.database.ServerValue.TIMESTAMP});
+        });
+      }
+    });
+
+    // 전체 접속자 수 실시간 구독 (다른 사람이 들어오거나 나갈 때마다 자동 갱신됨)
+    db.ref('presence').on('value',(snap)=>{
+      const cntEl=document.getElementById('cnt');
+      if(cntEl) cntEl.textContent=snap.numChildren();
+    });
+  }catch(e){
+    console.warn('presence 초기화 실패, 접속자 수는 표시되지 않습니다:',e.message);
+    const cntEl=document.getElementById('cnt');
+    if(cntEl) cntEl.textContent='-';
+  }
+}
 
 async function loadChat(){
   if(isSending)return; // 전송 중이면 자동 갱신 건너뛰기 (메시지 사라짐 방지)
   try{
-    const r=await fetch(`${FIREBASE_URL}/messages.json?orderBy="ts"&limitToLast=50`);
+    const r=await fetch(`${FIREBASE_URL}/messages.json?orderBy="ts"&limitToLast=${MAX_MESSAGES}`);
     if(!r.ok) throw new Error('fetch failed');
     const d=await r.json();
     if(!d){
@@ -246,14 +288,14 @@ async function loadChat(){
 
 async function saveMsg(msg){
   try{
-    const r=await fetch(`${FIREBASE_URL}/messages.json`,{
+    const r=await fetch('/api/send-message',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(msg)
     });
     if(!r.ok){
       const body=await r.text().catch(()=>'');
-      console.warn('Firebase 저장 실패:', r.status, body);
+      console.warn('메시지 저장 실패:', r.status, body);
       return false;
     }
     return true;
@@ -326,8 +368,7 @@ function renderChat(){
       </div>`;
     }).join('');
   box.scrollTop=box.scrollHeight;
-  const cntEl=document.getElementById('cnt');
-  if(cntEl) cntEl.textContent=Math.floor(Math.random()*12)+3;
+  // 접속자 수는 더 이상 여기서 갱신하지 않음 → initPresence()의 실시간 리스너가 전담
 }
 
 function sendMsg(){
@@ -451,6 +492,7 @@ function isMarketHours(){
   return mins>=540&&mins<=930;
 }
 
+initPresence();
 loadChat();
 updateClock();
 setInterval(updateClock,1000);
