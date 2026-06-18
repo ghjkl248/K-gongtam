@@ -33,6 +33,7 @@
 :root{
   --red:#E24B4A;--amber:#BA7517;--green:#0F6E56;
   --teal:#1D9E75;--c1:#0F8A5F;--c2:#8BC34A;--c3:#F2C12E;--c4:#E8842C;
+  --blue:#1E6FE0;
   --bg:#F5F5F5;--card:#fff;--text:#111;--text2:#666;--border:rgba(0,0,0,0.09);
 }
 @media(prefers-color-scheme:dark){
@@ -87,6 +88,21 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 .note{font-size:10px;color:var(--text2);text-align:center;line-height:1.7;padding:10px 0 4px}
 .refresh-btn{font-size:11px;padding:5px 12px;border-radius:14px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2)}
 .update-chip{font-size:10px;color:var(--text2);background:var(--bg);border-radius:8px;padding:3px 8px}
+.stock-row{display:flex;flex-direction:column;gap:8px}
+.stock-card{background:var(--bg);border-radius:12px;padding:11px 13px}
+.stock-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.stock-name{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.session-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap}
+.session-pre{background:rgba(186,117,23,.15);color:var(--amber)}
+.session-open{background:rgba(15,110,86,.15);color:var(--green)}
+.session-after{background:rgba(30,111,224,.13);color:var(--blue)}
+.session-closed{background:rgba(102,102,102,.13);color:var(--text2)}
+.stock-mid{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.stock-price{font-size:19px;font-weight:700}
+.stock-change{font-size:12px;font-weight:600;white-space:nowrap}
+.stock-usd{margin-top:5px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text2);border-top:1px dashed var(--border);padding-top:6px}
+.stock-usd b{color:var(--text);font-weight:600}
+.stock-skeleton{height:62px;border-radius:12px;background:var(--bg)}
 </style>
 </head>
 <body>
@@ -183,6 +199,18 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
       <div class="leg-item"><div class="leg-dot" style="background:#F2C12E"></div><span class="leg-range">45–54</span><div class="leg-name" style="color:#A87E0A">중립</div><div style="font-size:9px;color:var(--text2)">균형상태</div></div>
       <div class="leg-item"><div class="leg-dot" style="background:#E8842C"></div><span class="leg-range">55–74</span><div class="leg-name" style="color:#B85C1E">탐욕</div><div style="font-size:9px;color:var(--text2)">과열주의</div></div>
       <div class="leg-item"><div class="leg-dot" style="background:#D6433C"></div><span class="leg-range">75–100</span><div class="leg-name" style="color:#8E2E27">극단탐욕</div><div style="font-size:9px;color:var(--text2)">매도고려</div></div>
+    </div>
+  </div>
+
+  <!-- 주요 종목 실시간 시세 -->
+  <div class="card">
+    <div class="sec-title" style="display:flex;justify-content:space-between">
+      <span>주요 종목 시세</span>
+      <span style="font-weight:400;color:var(--text2);font-size:10px">10초마다 갱신</span>
+    </div>
+    <div class="stock-row" id="stock-row">
+      <div class="stock-skeleton"></div>
+      <div class="stock-skeleton"></div>
     </div>
   </div>
 
@@ -446,6 +474,7 @@ async function saveTodayScore(score){
 async function loadAll(){
   const data=await fetchMarketData();
   const {kospiChg, ma125dev, usdkrw, usScore, advancing, declining, newHigh, newLow, foreignNet, vkospi}=data;
+  if(usdkrw>0) lastUsdKrw=usdkrw; // 종목 USD 환산가 계산에 재사용 (market.js와 동일 환율 소스로 일관성 유지)
 
   const badge=document.getElementById('estimate-badge');
   if(badge) badge.style.display = data.isEstimated ? 'block' : 'none';
@@ -494,12 +523,89 @@ function isMarketHours(){
   return mins>=540&&mins<=930;
 }
 
+// ── 주요 종목(삼성전자/SK하이닉스) 실시간 시세 ──
+
+// 한국거래소 기준 장 구분을 KST 시각만으로 직접 판별.
+// 프리마켓 08:00~09:00, 정규장 09:00~15:30, 애프터마켓(시간외 단일가) 15:30~18:00, 그 외 장마감.
+function getMarketSession(){
+  const kst=new Date(Date.now()+9*3600000);
+  const day=kst.getUTCDay(); // 0=일,6=토 (kst로 보정했으므로 getUTCDay 사용)
+  const mins=kst.getUTCHours()*60+kst.getUTCMinutes();
+  if(day===0||day===6) return{key:'closed',label:'휴장',cls:'session-closed'};
+  if(mins>=480&&mins<540)  return{key:'pre',   label:'프리장',  cls:'session-pre'};
+  if(mins>=540&&mins<=930) return{key:'open',  label:'정규장',  cls:'session-open'};
+  if(mins>930&&mins<=1080) return{key:'after', label:'애프터장',cls:'session-after'};
+  return{key:'closed',label:'장마감',cls:'session-closed'};
+}
+
+const STOCKS_META=[
+  {code:'005930',name:'삼성전자',emoji:'🔵'},
+  {code:'000660',name:'SK하이닉스',emoji:'🔴'},
+];
+let lastUsdKrw=1400; // market.js의 환율을 그대로 재사용해 종목 USD 환산에 씀 (loadAll에서 갱신됨)
+
+function fmtWon(n){return Math.round(n).toLocaleString('ko-KR');}
+function fmtUsd(n){return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+async function loadStocks(){
+  const box=document.getElementById('stock-row');
+  if(!box) return;
+  try{
+    const r=await fetch('/api/stocks');
+    if(!r.ok) throw new Error('stocks fetch failed: '+r.status);
+    const d=await r.json();
+    renderStocks(d);
+  }catch(e){
+    console.warn('종목 시세 로드 실패:',e.message);
+    // 기존에 표시 중인 카드가 있으면 그대로 유지하고, 처음부터 실패한 경우에만 안내 문구 표시
+    if(box.querySelector('.stock-skeleton')){
+      box.innerHTML='<div style="text-align:center;padding:14px;color:var(--text2);font-size:12px">시세를 불러오지 못했습니다</div>';
+    }
+  }
+}
+
+function renderStocks(d){
+  const box=document.getElementById('stock-row');
+  if(!box) return;
+  const session=getMarketSession();
+  const map={'005930':d.samsung,'000660':d.skhynix};
+
+  box.innerHTML=STOCKS_META.map(meta=>{
+    const s=map[meta.code];
+    if(!s){
+      return`<div class="stock-card"><div style="font-size:12px;color:var(--text2)">${meta.name} 시세를 불러오지 못했습니다</div></div>`;
+    }
+    const up=s.change>=0;
+    const arrow=up?'▲':'▼';
+    // 한국식 표기: 상승=빨강, 하락=파랑
+    const chgCol=up?'var(--red)':'var(--blue)';
+    const usd=lastUsdKrw>0 ? s.price/lastUsdKrw : null;
+
+    return`<div class="stock-card">
+      <div class="stock-top">
+        <div class="stock-name"><span>${meta.emoji}</span><span>${meta.name}</span></div>
+        <span class="session-badge ${session.cls}">${session.label}</span>
+      </div>
+      <div class="stock-mid">
+        <div class="stock-price">₩${fmtWon(s.price)}</div>
+        <div class="stock-change" style="color:${chgCol}">${arrow} ${fmtWon(Math.abs(s.change))} (${up?'+':''}${s.changeRate.toFixed(2)}%)</div>
+      </div>
+      <div class="stock-usd">
+        <span>해외(USD) 환산가</span>
+        <b>${usd!=null?'$'+fmtUsd(usd):'--'}</b>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 initPresence();
 loadChat();
 updateClock();
 setInterval(updateClock,1000);
 loadAll();
 setInterval(loadAll, isMarketHours()?5*60000:30*60000);
+loadStocks();
+setInterval(loadStocks, 10000); // 요청사항: 종목 시세는 10초 간격으로 갱신
 </script>
 </body>
 </html>
