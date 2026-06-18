@@ -29,6 +29,17 @@ export default async function handler(req, res) {
   }
 }
 
+// 네이버 응답의 숫자 필드는 "362,500"처럼 천 단위 쉼표가 포함된 문자열로 내려옴.
+// parseFloat("362,500")은 쉼표에서 즉시 멈춰 362만 읽어버리는 버그가 있었음(₩362로 보이던 원인).
+// 반드시 쉼표를 먼저 제거하고 숫자로 변환해야 함.
+function toNum(v){
+  if (v == null) return 0;
+  if (typeof v === 'number') return v;
+  const cleaned = String(v).replace(/,/g, '').trim();
+  const n = parseFloat(cleaned);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 // 네이버 금융 실시간 시세 API (market.js의 fetchKospi가 쓰는 것과 동일한 호스트/패턴).
 // 종목코드 하나로 정규장 시세 + 프리장/애프터장 시세(overMarketPriceInfo)까지 함께 가져옴.
 async function fetchStock(code) {
@@ -45,17 +56,27 @@ async function fetchStock(code) {
   // tradingSessionType: 'PRE_MARKET' | 'AFTER_MARKET' 등. 정규장 중에는 이 필드가 없거나 비어있음.
   const over = o.overMarketPriceInfo || null;
 
+  const price      = toNum(o.closePrice);
+  const change     = toNum(o.compareToPreviousClosePrice);
+  const changeRate = toNum(o.fluctuationsRatio);
+
+  // 방어적 검증: 삼성전자/SK하이닉스는 항상 수만~수백만원대이므로, 비정상적으로 작은 값이
+  // 나오면(파싱 오류 등) 0 대신 명확히 실패로 처리해서 화면에 이상한 가격이 뜨지 않게 함
+  if (price < 1000) {
+    throw new Error(`naver stock ${code} price looks invalid: raw=${o.closePrice}, parsed=${price}`);
+  }
+
   return {
     code,
     name: o.stockName || '',
-    price: parseFloat(o.closePrice ?? 0),                     // 정규장 기준 현재가/종가(원)
-    change: parseFloat(o.compareToPreviousClosePrice ?? 0),    // 전일대비(원), 음수면 하락
-    changeRate: parseFloat(o.fluctuationsRatio ?? 0),          // 전일대비(%), 음수면 하락
-    marketStatus: o.marketStatus || null,                      // 'OPEN' | 'CLOSE' 등 네이버 기준 정규장 상태
+    price,                      // 정규장 기준 현재가/종가(원)
+    change,                     // 전일대비(원), 음수면 하락
+    changeRate,                 // 전일대비(%), 음수면 하락
+    marketStatus: o.marketStatus || null, // 'OPEN' | 'CLOSE' 등 네이버 기준 정규장 상태
     overMarket: over ? {
-      sessionType: over.tradingSessionType || null,            // 'PRE_MARKET' | 'AFTER_MARKET'
-      price: parseFloat(over.overPrice ?? over.price ?? 0) || null,
-      changeRate: parseFloat(over.overFluctuationsRatio ?? over.fluctuationsRatio ?? 0) || null,
+      sessionType: over.tradingSessionType || null, // 'PRE_MARKET' | 'AFTER_MARKET'
+      price: toNum(over.overPrice ?? over.price) || null,
+      changeRate: toNum(over.overFluctuationsRatio ?? over.fluctuationsRatio) || null,
     } : null,
   };
 }
