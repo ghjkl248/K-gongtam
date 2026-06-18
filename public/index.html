@@ -115,8 +115,10 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
         <text x="160" y="18"  font-size="11" fill="var(--text2)" text-anchor="middle">50</text>
         <text x="262" y="68"  font-size="11" fill="var(--text2)" text-anchor="middle">75</text>
         <text x="304" y="168" font-size="11" fill="var(--text2)" text-anchor="middle">100</text>
-        <!-- 바늘: score=50 → rotate=0(12시), score=0 → rotate=-90(9시), score=100 → rotate=+90(3시) -->
-        <g id="ndl" transform="rotate(-90 160 160)">
+        <!-- 바늘: score=50 → rotate=0(12시), score=0 → rotate=-90(9시), score=100 → rotate=+90(3시)
+             CSS transform(=style.transform)으로 회전시켜야 transition이 모든 브라우저에서 먹음.
+             transform-origin을 중심점(160,160)으로 고정해야 SVG attribute transform과 동일하게 회전함 -->
+        <g id="ndl" style="transform:rotate(-90deg);transform-origin:160px 160px;transition:transform 1.4s cubic-bezier(.34,1.2,.4,1)">
           <line x1="160" y1="160" x2="160" y2="52" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round"/>
           <circle cx="160" cy="160" r="9" fill="var(--text)"/>
           <circle cx="160" cy="160" r="5" fill="var(--card)"/>
@@ -330,7 +332,7 @@ function updateGauge(score){
   document.getElementById('kr-st').textContent=st.short;
   document.getElementById('kr-st').style.color=st.col;
   const ndl=document.getElementById('ndl');
-  if(ndl) ndl.setAttribute('transform','rotate('+scoreToRot(score)+' 160 160)');
+  if(ndl) ndl.style.transform='rotate('+scoreToRot(score)+'deg)';
   const now=new Date();
   const t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   document.getElementById('update-chip').textContent='마지막 업데이트: '+t;
