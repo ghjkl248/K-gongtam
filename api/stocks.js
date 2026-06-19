@@ -42,26 +42,15 @@ export default async function handler(req, res) {
 // 삼성전자/SK하이닉스는 한국거래소 외 정식 상장이 없어서, "해외에서 실시간으로 거래되는 가격"에
 // 가장 가까운 공개 소스가 바이낸스의 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물(2025.6 상장)임.
 // 단, 이는 현금(USDT) 정산되는 파생상품 가격으로 한국 코스피 정식 시세가 아니라 참고용 추정치임.
-// 바이낸스가 일부 지역(서버 IP 포함)에서 접근이 막힐 수 있어, 실패 시 독일 프랑크푸르트 OTC
-// (Yahoo Finance가 제공하는 SSU.F/HY9H.F) 가격으로 폴백함.
+//
+// 참고: 독일 프랑크푸르트 OTC(SSU.F 등)도 시도해봤으나, 그곳의 "1주"는 코스피 1주와 환산
+// 비율(GDR ratio)이 달라서(예: 프랑크푸르트 1주 ≈ 코스피 수십 주) 단순히 가격×환율로 계산하면
+// 비현실적으로 큰 값이 나옴(삼성전자가 $5,700대로 잘못 표시됐던 원인). 비율이 공개적으로
+// 안정적이지 않아 신뢰할 수 없으므로 폴백에서 제외하고, 바이낸스 단일 소스만 사용함.
 async function fetchOverseasUsd(label) {
-  const SOURCES = {
-    samsung: { binance: 'SAMSUNGUSDT', frankfurt: 'SSU.F' },
-    skhynix: { binance: 'SKHYNIXUSDT', frankfurt: 'HY9H.F' },
-  };
-  const src = SOURCES[label];
-
-  try {
-    return { price: await fetchBinancePerp(src.binance), source: 'binance' };
-  } catch (e1) {
-    console.error(`stocks: ${label} 바이낸스 실패, 프랑크푸르트 OTC로 폴백:`, e1.message);
-    try {
-      return { price: await fetchFrankfurtOtcUsd(src.frankfurt), source: 'frankfurt' };
-    } catch (e2) {
-      console.error(`stocks: ${label} 프랑크푸르트 OTC도 실패:`, e2.message);
-      throw new Error(`${label}: 모든 해외가 소스 실패 (binance: ${e1.message} / frankfurt: ${e2.message})`);
-    }
-  }
+  const BINANCE_SYMBOLS = { samsung: 'SAMSUNGUSDT', skhynix: 'SKHYNIXUSDT' };
+  const price = await fetchBinancePerp(BINANCE_SYMBOLS[label]);
+  return { price, source: 'binance' };
 }
 
 async function fetchBinancePerp(symbol) {
@@ -71,24 +60,6 @@ async function fetchBinancePerp(symbol) {
   const price = parseFloat(d.price);
   if (!price || Number.isNaN(price)) throw new Error(`binance ${symbol} invalid price: ${JSON.stringify(d)}`);
   return price; // USD(USDT 기준) 가격
-}
-
-// 독일 프랑크푸르트 거래소 OTC 시세(EUR로 거래됨)를 Yahoo Finance에서 가져와 USD로 환산.
-// market.js가 이미 같은 호스트(query1.finance.yahoo.com)를 정상적으로 쓰고 있어 차단 위험이 적음.
-async function fetchFrankfurtOtcUsd(ticker) {
-  const [quoteRes, fxRes] = await Promise.all([
-    fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-    fetch('https://query1.finance.yahoo.com/v8/finance/chart/EURUSD=X?interval=1d&range=1d', { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-  ]);
-  if (!quoteRes.ok) throw new Error(`yahoo ${ticker} fetch failed: status ${quoteRes.status}`);
-  if (!fxRes.ok) throw new Error(`yahoo EURUSD fetch failed: status ${fxRes.status}`);
-  const quoteData = await quoteRes.json();
-  const fxData = await fxRes.json();
-  const priceEur = quoteData.chart?.result?.[0]?.meta?.regularMarketPrice;
-  const eurUsd = fxData.chart?.result?.[0]?.meta?.regularMarketPrice;
-  if (!priceEur) throw new Error(`yahoo ${ticker} response missing regularMarketPrice`);
-  if (!eurUsd) throw new Error('yahoo EURUSD response missing regularMarketPrice');
-  return priceEur * eurUsd; // EUR → USD 환산
 }
 
 // market.js의 fetchUSDKRW와 동일한 소스(Yahoo Finance). 10초 폴링 화면에서 환율도
