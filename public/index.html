@@ -595,11 +595,13 @@ function renderStocks(d){
     const arrow=up?'▲':'▼';
     // 한국식 표기: 상승=빨강, 하락=파랑
     const chgCol=up?'var(--red)':'var(--blue)';
-    // 해외(USD) 추정가: 바이낸스 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물 가격(USD, 실패 시 독일
-    // 프랑크푸르트 OTC로 자동 대체) × 실시간 환율(10초 갱신) = 해외에서 보는 가격을 원화로 환산.
+    // 해외(USD) 추정가: 바이낸스 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물 가격(USD) × 실시간 환율(10초 갱신)
     const overseasUsd = overseas?.price ?? null;
     const overseasWon = (overseasUsd!=null && lastUsdKrw>0) ? overseasUsd*lastUsdKrw : null;
     const sourceLabel = overseas?.source ? SOURCE_LABEL[overseas.source] : null;
+    // 진단용: 조회 실패 시 정확한 원인을 작게 표시 (원인 파악되면 제거 예정)
+    const errKey = meta.code==='005930' ? 'samsungOverseasError' : 'skhynixOverseasError';
+    const errMsg = d.debug?.[errKey];
 
     return`<div class="stock-card">
       <div class="stock-top">
@@ -616,7 +618,7 @@ function renderStocks(d){
         <div class="price-col">
           <span class="price-col-lbl">해외 추정가(₩)</span>
           <span class="price-col-val">${overseasWon!=null?'₩'+fmtWon(overseasWon):'조회 실패'}</span>
-          ${overseasUsd!=null?`<span class="stock-fx">≈ $${overseasUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} USD${sourceLabel?' · '+sourceLabel:''}</span>`:'<span class="stock-fx">&nbsp;</span>'}
+          ${overseasUsd!=null?`<span class="stock-fx">≈ $${overseasUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} USD${sourceLabel?' · '+sourceLabel:''}</span>`:(errMsg?`<span class="stock-fx" style="color:var(--blue)">${errMsg}</span>`:'<span class="stock-fx">&nbsp;</span>')}
         </div>
       </div>
       <div class="stock-bottom">
