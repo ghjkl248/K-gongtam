@@ -37,8 +37,11 @@ export default async function handler(req, res) {
       body: JSON.stringify(msg),
     });
     if (!postRes.ok) {
-      console.error('send-message: 메시지 저장 실패', postRes.status);
-      return res.status(502).json({ ok: false, error: '메시지 저장 실패' });
+      const body = await postRes.text().catch(() => '');
+      console.error('send-message: 메시지 저장 실패', postRes.status, body);
+      // Firebase가 거부한 정확한 이유(예: 보안 규칙 권한 거부)를 응답에 포함시켜
+      // 클라이언트 화면에서도 바로 원인을 확인할 수 있게 함
+      return res.status(502).json({ ok: false, error: `Firebase 저장 실패 (status ${postRes.status}): ${body}` });
     }
     const { name: newKey } = await postRes.json(); // Firebase가 생성한 push key
 
