@@ -57,9 +57,30 @@ async function fetchStock(code) {
   const o = d.datas?.[0];
   if (!o) throw new Error(`naver stock ${code} response missing datas[0]`);
 
-  const price      = toNum(o.closePrice);
-  const change     = toNum(o.compareToPreviousClosePrice);
-  const changeRate = toNum(o.fluctuationsRatio);
+  // overMarketPriceInfo: 정규장(09:00~15:30) 시간 외(프리장/애프터마켓)일 때 네이버가 함께
+  // 내려주는 시간외 단일가 시세. closePrice만 쓰면 정규장 종가에 고정된 것처럼 보이는 문제가
+  // 있었음 — 이 필드가 있으면(=지금이 프리/애프터장) 그 가격을 최신가로 우선 사용해야 함.
+  const over = o.overMarketPriceInfo || null;
+  const overPriceRaw = over?.overPrice;
+  const hasOverPrice = overPriceRaw != null && toNum(overPriceRaw) >= 1000;
+
+  // 시간외 가격이 있으면 그걸 현재가로 쓰고, 전일대비도 시간외 기준으로 다시 계산.
+  // 전일종가 = 정규장 closePrice - compareToPreviousClosePrice (네이버가 정규장 기준으로 주는 전일대비를
+  // 거꾸로 풀어서 전일 종가를 구한 뒤, 시간외가 기준 등락률을 직접 계산함)
+  const regularPrice  = toNum(o.closePrice);
+  const regularChange = toNum(o.compareToPreviousClosePrice);
+  const prevClose = regularPrice - regularChange;
+
+  let price, change, changeRate;
+  if (hasOverPrice) {
+    price = toNum(overPriceRaw);
+    change = prevClose > 0 ? price - prevClose : toNum(over.compareToPreviousPrice?.value ?? over.fluctuationsRatio ?? 0);
+    changeRate = prevClose > 0 ? (change / prevClose) * 100 : toNum(over.fluctuationsRatio ?? o.fluctuationsRatio);
+  } else {
+    price = regularPrice;
+    change = regularChange;
+    changeRate = toNum(o.fluctuationsRatio);
+  }
 
   // 방어적 검증: 삼성전자/SK하이닉스는 항상 수만~수백만원대이므로, 비정상적으로 작은 값이
   // 나오면(파싱 오류 등) 0 대신 명확히 실패로 처리해서 화면에 이상한 가격이 뜨지 않게 함
@@ -70,9 +91,10 @@ async function fetchStock(code) {
   return {
     code,
     name: o.stockName || '',
-    price,                      // 현재가(원) — 프리/정규/애프터장에 따라 네이버가 알맞은 값을 반영
+    price,                      // 현재가(원) — 프리/애프터장 중이면 시간외 단일가, 아니면 정규장가
     change,                     // 전일대비(원), 음수면 하락
     changeRate,                 // 전일대비(%), 음수면 하락
     marketStatus: o.marketStatus || null,
+    isOverMarket: hasOverPrice, // 진단/디버그용: 시간외 가격을 썼는지 여부
   };
 }
