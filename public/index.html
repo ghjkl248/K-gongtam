@@ -215,6 +215,17 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
     </div>
   </div>
 
+  <!-- 코스피 히트맵 -->
+  <div class="card">
+    <div class="sec-title" style="display:flex;justify-content:space-between">
+      <span>코스피 HEAT MAP (시가총액 상위 36)</span>
+      <span style="font-weight:400;color:var(--text2);font-size:10px">5분마다 갱신</span>
+    </div>
+    <div id="heatmap-box" style="position:relative;width:100%;aspect-ratio:16/11;border-radius:10px;overflow:hidden;background:var(--bg)">
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-size:12px">불러오는 중...</div>
+    </div>
+  </div>
+
   <!-- 대화방 -->
   <div class="card">
     <div class="sec-title" style="display:flex;justify-content:space-between">
@@ -617,6 +628,131 @@ function renderStocks(d){
   }).join('')}</div>`;
 }
 
+// ── 코스피 히트맵 (시가총액 상위 36개, 스퀘어파이드 트리맵) ──
+
+async function loadHeatmap(){
+  const box=document.getElementById('heatmap-box');
+  if(!box) return;
+  try{
+    const r=await fetch('/api/heatmap',{cache:'no-store'});
+    if(!r.ok) throw new Error('heatmap fetch failed: '+r.status);
+    const d=await r.json();
+    if(!d.stocks || !d.stocks.length) throw new Error('빈 데이터');
+    renderHeatmap(d.stocks);
+  }catch(e){
+    console.warn('히트맵 로드 실패:',e.message);
+    box.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-size:12px">히트맵을 불러오지 못했습니다</div>';
+  }
+}
+
+// 등락률 → 빨강(상승)/파랑(하락) 색상. 등락률 절댓값이 클수록 진하게.
+// 한국식 표기: 상승=빨강, 하락=파랑 (해외 히트맵의 빨강=하락과 반대이니 주의)
+function heatmapColor(changeRate){
+  const t=Math.min(Math.abs(changeRate)/5, 1); // ±5% 이상이면 가장 진한 색으로 포화
+  if(changeRate>=0){
+    // 연한 빨강(#F4C9C8) → 진한 빨강(#C2342F)
+    return mixColor([244,201,200],[194,52,47],t);
+  }else{
+    // 연한 파랑(#C7D6F4) → 진한 파랑(#1E4FB8)
+    return mixColor([199,214,244],[30,79,184],t);
+  }
+}
+function mixColor(c1,c2,t){
+  const r=Math.round(c1[0]+(c2[0]-c1[0])*t);
+  const g=Math.round(c1[1]+(c2[1]-c1[1])*t);
+  const b=Math.round(c1[2]+(c2[2]-c1[2])*t);
+  return `rgb(${r},${g},${b})`;
+}
+
+// 스퀘어파이드 트리맵(squarified treemap) 알고리즘. 시가총액 비율대로 사각형 면적을 배분하면서
+// 가능한 한 정사각형에 가까운(너무 길쭉하지 않은) 모양으로 배치함 — 업계 표준 방식.
+// items: [{value, ...}] value 내림차순 정렬되어 있어야 함. 반환값: 각 item에 {x,y,w,h}(0~100 비율) 추가.
+function squarify(items, x, y, w, h){
+  if(items.length===0) return [];
+  if(items.length===1){
+    items[0]._rect={x,y,w,h};
+    return items;
+  }
+  const total=items.reduce((s,it)=>s+it.value,0);
+  // 현재 행에 넣을 항목들을 worst aspect ratio가 최소가 되는 지점까지 누적
+  let i=1, bestWorst=Infinity, row=[items[0]];
+  const isWide = w>=h; // 넓은 변을 따라 행을 쌓음
+  const side = isWide ? h : w;
+
+  function worstRatio(rowItems, sideLen, totalSoFar, total){
+    const rowSum=rowItems.reduce((s,it)=>s+it.value,0);
+    const rowLen = (rowSum/total) * (isWide?w:h) / sideLen * sideLen; // 행이 차지하는 길이(주축)
+    // 실제 계산: 행 면적 = rowSum/total * (w*h). 행의 두께 = 행면적 / sideLen
+    const areaTotal = w*h;
+    const rowArea = (rowSum/total)*areaTotal;
+    const thickness = rowArea / sideLen;
+    let worst=0;
+    for(const it of rowItems){
+      const itemArea=(it.value/total)*areaTotal;
+      const itemLen = itemArea/thickness;
+      const ratio = Math.max(itemLen/thickness, thickness/itemLen);
+      worst=Math.max(worst, ratio);
+    }
+    return worst;
+  }
+
+  for(i=1;i<=items.length;i++){
+    const candidateRow=items.slice(0,i);
+    const w_=worstRatio(candidateRow, side, 0, total);
+    if(i>1 && w_>bestWorst){ i--; break; }
+    bestWorst=w_;
+    if(i===items.length) break;
+  }
+  const rowItems=items.slice(0,i);
+  const rest=items.slice(i);
+  const rowSum=rowItems.reduce((s,it)=>s+it.value,0);
+  const areaTotal=w*h;
+  const rowArea=(rowSum/total)*areaTotal;
+  const thickness=rowArea/side;
+
+  let pos=0;
+  for(const it of rowItems){
+    const itemArea=(it.value/total)*areaTotal;
+    const itemLen=itemArea/thickness;
+    if(isWide){
+      it._rect={x:x, y:y+pos, w:thickness, h:itemLen};
+    }else{
+      it._rect={x:x+pos, y:y, w:itemLen, h:thickness};
+    }
+    pos+=itemLen;
+  }
+
+  if(isWide){
+    squarify(rest, x+thickness, y, w-thickness, h);
+  }else{
+    squarify(rest, x, y+thickness, w, h-thickness);
+  }
+  return items;
+}
+
+function renderHeatmap(stocks){
+  const box=document.getElementById('heatmap-box');
+  if(!box) return;
+  // 시가총액 내림차순 정렬 + 트리맵 계산용 value 필드 부여
+  const items=stocks.slice().sort((a,b)=>b.marketCap-a.marketCap).map(s=>({...s, value:Math.max(s.marketCap,1)}));
+  squarify(items, 0, 0, 100, 100);
+
+  box.innerHTML=items.map(it=>{
+    const r=it._rect;
+    if(!r || r.w<=0 || r.h<=0) return '';
+    const col=heatmapColor(it.changeRate);
+    // 블록이 작으면 이름/숫자가 안 보이게 글자 크기를 면적에 비례해 조정
+    const area=r.w*r.h; // 0~10000 (퍼센트 곱)
+    const nameSize=area>800?13:area>250?11:area>80?9:0;
+    const rateSize=area>800?13:area>250?11:area>80?9:0;
+    const up=it.changeRate>=0;
+    return `<div style="position:absolute;left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%;background:${col};border:1px solid rgba(255,255,255,.5);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:2px">
+      ${nameSize?`<div style="color:#fff;font-size:${nameSize}px;font-weight:600;text-align:center;line-height:1.2;text-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${it.name}</div>`:''}
+      ${rateSize?`<div style="color:#fff;font-size:${rateSize}px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.25)">${up?'+':''}${it.changeRate.toFixed(2)}%</div>`:''}
+    </div>`;
+  }).join('');
+}
+
 initPresence();
 loadChat();
 updateClock();
@@ -625,6 +761,8 @@ loadAll();
 setInterval(loadAll, isMarketHours()?5*60000:30*60000);
 loadStocks();
 setInterval(loadStocks, 10000); // 요청사항: 종목 시세는 10초 간격으로 갱신
+loadHeatmap();
+setInterval(loadHeatmap, 5*60000); // 히트맵은 5분 간격으로 갱신
 </script>
 </body>
 </html>
