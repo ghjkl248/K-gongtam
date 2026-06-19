@@ -222,6 +222,7 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
       <span style="font-weight:400;color:var(--text2)">접속 <span id="cnt">--</span>명</span>
     </div>
     <div class="chat-msgs" id="chat-msgs"></div>
+    <div id="chat-error" style="display:none;font-size:11px;color:#fff;background:var(--red);border-radius:8px;padding:6px 10px;margin-bottom:6px"></div>
     <div class="chat-row">
       <input id="nick" placeholder="닉네임" style="max-width:76px;flex:none">
       <input id="msg-inp" placeholder="의견을 남겨주세요..." onkeydown="if(event.key==='Enter')sendMsg()">
@@ -422,7 +423,14 @@ function sendMsg(){
       const idx=chatMessages.indexOf(msg);
       if(idx>-1) chatMessages.splice(idx,1);
       renderChat();
-      alert('메시지 저장에 실패했습니다.\n원인: '+result.error+'\n\n(Firebase 보안 규칙에서 messages 쓰기 권한이 막혀있을 수 있습니다)');
+      // alert()는 PWA/모바일 웹뷰 환경에서 차단되거나 안 보일 수 있어, 화면 안에 직접
+      // 보이는 배너로 표시. 10초 후 자동으로 사라짐
+      const errEl=document.getElementById('chat-error');
+      if(errEl){
+        errEl.textContent='메시지 저장 실패: '+result.error;
+        errEl.style.display='block';
+        setTimeout(()=>{errEl.style.display='none';},10000);
+      }
     }
   }).finally(()=>{
     setTimeout(()=>{isSending=false;},3000); // 3초간 자동갱신 보류
