@@ -91,9 +91,10 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 .stock-row{display:flex;flex-direction:column;gap:8px}
 .stock-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stock-card{background:var(--bg);border-radius:12px;padding:11px 13px}
-.stock-top{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:8px;flex-wrap:wrap}
-.stock-name{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
-.session-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap}
+.stock-top{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:8px;flex-wrap:nowrap}
+.stock-name{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;min-width:0;overflow:hidden}
+.stock-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0}
 .session-pre{background:rgba(186,117,23,.15);color:var(--amber)}
 .session-open{background:rgba(15,110,86,.15);color:var(--green)}
 .session-after{background:rgba(30,111,224,.13);color:var(--blue)}
@@ -737,18 +738,31 @@ function renderHeatmap(stocks){
   const items=stocks.slice().sort((a,b)=>b.marketCap-a.marketCap).map(s=>({...s, value:Math.max(s.marketCap,1)}));
   squarify(items, 0, 0, 100, 100);
 
+  // 글자 크기를 %면적이 아니라 실제 픽셀 크기 기준으로 계산해야 화면 크기에 관계없이 일정하게 보임.
+  // 컨테이너의 실제 너비/높이를 가져와 각 블록의 실제 px 크기를 역산.
+  const boxW=box.clientWidth||320, boxH=box.clientHeight||220;
+
   box.innerHTML=items.map(it=>{
     const r=it._rect;
     if(!r || r.w<=0 || r.h<=0) return '';
     const col=heatmapColor(it.changeRate);
-    // 블록이 작으면 이름/숫자가 안 보이게 글자 크기를 면적에 비례해 조정
-    const area=r.w*r.h; // 0~10000 (퍼센트 곱)
-    const nameSize=area>800?13:area>250?11:area>80?9:0;
-    const rateSize=area>800?13:area>250?11:area>80?9:0;
+    const pxW=(r.w/100)*boxW, pxH=(r.h/100)*boxH;
+    const minSide=Math.min(pxW,pxH);
     const up=it.changeRate>=0;
-    return `<div style="position:absolute;left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%;background:${col};border:1px solid rgba(255,255,255,.5);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:2px">
-      ${nameSize?`<div style="color:#fff;font-size:${nameSize}px;font-weight:600;text-align:center;line-height:1.2;text-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${it.name}</div>`:''}
-      ${rateSize?`<div style="color:#fff;font-size:${rateSize}px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.25)">${up?'+':''}${it.changeRate.toFixed(2)}%</div>`:''}
+
+    // 단계를 세분화: 아주 작은 블록도 가능한 한 이름은 보이도록 함.
+    // minSide(블록의 짧은 변, px) 기준으로 글자 크기와 표시 항목을 결정.
+    let nameSize=0, rateSize=0, showRate=true;
+    if(minSide>=46){ nameSize=12; rateSize=11; }
+    else if(minSide>=32){ nameSize=10; rateSize=9; }
+    else if(minSide>=22){ nameSize=8; rateSize=0; showRate=false; } // 너무 작으면 등락률은 생략, 이름만
+    else if(minSide>=14){ nameSize=7; rateSize=0; showRate=false; }
+    else if(minSide>=9){ nameSize=6; rateSize=0; showRate=false; } // 매우 작은 블록도 6px로 이름은 시도
+    else { nameSize=0; rateSize=0; showRate=false; } // 진짜 점만한 크기일 때만 빈칸
+
+    return `<div style="position:absolute;left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%;background:${col};border:1px solid rgba(255,255,255,.5);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:1px">
+      ${nameSize?`<div style="color:#fff;font-size:${nameSize}px;font-weight:600;text-align:center;line-height:1.15;text-shadow:0 1px 2px rgba(0,0,0,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${it.name}</div>`:''}
+      ${showRate&&rateSize?`<div style="color:#fff;font-size:${rateSize}px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.3)">${up?'+':''}${it.changeRate.toFixed(2)}%</div>`:''}
     </div>`;
   }).join('');
 }
