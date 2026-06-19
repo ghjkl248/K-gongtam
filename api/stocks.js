@@ -30,6 +30,12 @@ export default async function handler(req, res) {
       usdkrw: usdkrw.status === 'fulfilled' ? usdkrw.value : null,
       samsungOverseas: samsungOver.status === 'fulfilled' ? samsungOver.value : null,   // {price, source}
       skhynixOverseas: skhynixOver.status === 'fulfilled' ? skhynixOver.value : null,
+      // 진단용: 해외가 조회가 실패한 정확한 이유를 화면까지 전달해서, Vercel 로그를 보지 않고도
+      // 어느 단계(네트워크 차단/심볼명 오류/응답 형식 변경 등)에서 막혔는지 바로 확인 가능하게 함
+      debug: {
+        samsungOverseasError: samsungOver.status === 'rejected' ? samsungOver.reason?.message : null,
+        skhynixOverseasError: skhynixOver.status === 'rejected' ? skhynixOver.reason?.message : null,
+      },
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
