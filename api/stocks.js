@@ -44,19 +44,41 @@ export default async function handler(req, res) {
   }
 }
 
-// 바이낸스 USDT 무기한 선물(perpetual futures) 가격 조회. 인증 불필요한 공개 마켓 데이터 엔드포인트.
-// 삼성전자/SK하이닉스는 한국거래소 외 정식 상장이 없어서, "해외에서 실시간으로 거래되는 가격"에
-// 가장 가까운 공개 소스가 바이낸스의 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물(2025.6 상장)임.
-// 단, 이는 현금(USDT) 정산되는 파생상품 가격으로 한국 코스피 정식 시세가 아니라 참고용 추정치임.
+// 해외(USD) 추정가 소스: 바이비트(Bybit) → 실패 시 바이낸스(Binance) 순서로 시도.
+// 둘 다 2026년 6월부터 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물(1배 추종, USDT 정산)을 상장했음.
+// 바이낸스 호출이 status 451(Unavailable For Legal Reasons = 지역/법적 차단)로 거부되는 것이
+// 확인되어, 완전히 다른 도메인(api.bybit.com)인 바이비트를 1차로 시도해 차단 영향을 분리함.
 //
-// 참고: 독일 프랑크푸르트 OTC(SSU.F 등)도 시도해봤으나, 그곳의 "1주"는 코스피 1주와 환산
-// 비율(GDR ratio)이 달라서(예: 프랑크푸르트 1주 ≈ 코스피 수십 주) 단순히 가격×환율로 계산하면
-// 비현실적으로 큰 값이 나옴(삼성전자가 $5,700대로 잘못 표시됐던 원인). 비율이 공개적으로
-// 안정적이지 않아 신뢰할 수 없으므로 폴백에서 제외하고, 바이낸스 단일 소스만 사용함.
+// 참고: 런던/프랑크푸르트의 GDR(SMSN, SSU 등)도 검토했으나, GDR 1주가 코스피 1주와 다른
+// 환산 비율로 거래되어(예: SMSN GDR 1주 = 코스피 0.5주, 가격은 약 12배) 단순 환율 계산으로는
+// 정확한 1배 비교가 불가능함. 비율이 종목마다 다르고 공개적으로 안정적이지 않아 제외함.
 async function fetchOverseasUsd(label) {
-  const BINANCE_SYMBOLS = { samsung: 'SAMSUNGUSDT', skhynix: 'SKHYNIXUSDT' };
-  const price = await fetchBinancePerp(BINANCE_SYMBOLS[label]);
-  return { price, source: 'binance' };
+  const SYMBOLS = { samsung: 'SAMSUNGUSDT', skhynix: 'SKHYNIXUSDT' };
+  const symbol = SYMBOLS[label];
+
+  try {
+    return { price: await fetchBybitPerp(symbol), source: 'bybit' };
+  } catch (e1) {
+    console.error(`stocks: ${label} 바이비트 실패, 바이낸스로 폴백:`, e1.message);
+    try {
+      return { price: await fetchBinancePerp(symbol), source: 'binance' };
+    } catch (e2) {
+      console.error(`stocks: ${label} 바이낸스도 실패:`, e2.message);
+      throw new Error(`${label}: 바이비트(${e1.message}) / 바이낸스(${e2.message}) 모두 실패`);
+    }
+  }
+}
+
+// 바이비트 V5 공개 마켓 데이터 API. 인증 불필요, category=linear가 USDT 무기한 선물.
+async function fetchBybitPerp(symbol) {
+  const r = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`);
+  if (!r.ok) throw new Error(`bybit ${symbol} fetch failed: status ${r.status}`);
+  const d = await r.json();
+  if (d.retCode !== 0) throw new Error(`bybit ${symbol} retCode ${d.retCode}: ${d.retMsg}`);
+  const item = d.result?.list?.[0];
+  const price = parseFloat(item?.lastPrice);
+  if (!price || Number.isNaN(price)) throw new Error(`bybit ${symbol} invalid price: ${JSON.stringify(d.result)}`);
+  return price;
 }
 
 async function fetchBinancePerp(symbol) {
