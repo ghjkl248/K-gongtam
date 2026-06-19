@@ -531,18 +531,18 @@ function isMarketHours(){
 // ── 주요 종목(삼성전자/SK하이닉스) 실시간 시세 ──
 
 // 한국거래소 기준 장 구분을 KST 시각만으로 직접 판별.
-// 프리마켓 08:00~09:00, 정규장 09:00~15:30, 애프터마켓(시간외 단일가) 15:30~18:00.
-// 18:00~다음날 08:00(그리고 주말 전체)는 '장마감'으로 표시되며, 이 구간에는 네이버 API가
-// 자체적으로 직전 정규장 종가를 그대로 내려주므로(가격이 바뀌지 않음) 별도 처리 없이도
+// 프리마켓 08:00~09:00, 정규장 09:00~15:30, 애프터마켓(시간외 단일가) 15:40~20:00.
+// 20:00~다음날 08:00(그리고 주말 전체)는 '장마감'으로 표시되며, 이 구간에는 네이버 API가
+// 자체적으로 직전 애프터마켓 종가를 그대로 내려주므로(가격이 바뀌지 않음) 별도 처리 없이도
 // "애프터장 종료 후 종가 유지 → 다음날 08:00 프리장 시작과 함께 자동 갱신"이 그대로 성립함.
 function getMarketSession(){
   const kst=new Date(Date.now()+9*3600000);
   const day=kst.getUTCDay(); // 0=일,6=토 (kst로 보정했으므로 getUTCDay 사용)
   const mins=kst.getUTCHours()*60+kst.getUTCMinutes();
   if(day===0||day===6) return{key:'closed',label:'휴장',cls:'session-closed'};
-  if(mins>=480&&mins<540)  return{key:'pre',   label:'프리장',  cls:'session-pre'};
-  if(mins>=540&&mins<=930) return{key:'open',  label:'정규장',  cls:'session-open'};
-  if(mins>930&&mins<=1080) return{key:'after', label:'애프터장',cls:'session-after'};
+  if(mins>=480&&mins<540)   return{key:'pre',   label:'프리장',  cls:'session-pre'};
+  if(mins>=540&&mins<=930)  return{key:'open',  label:'정규장',  cls:'session-open'};
+  if(mins>=940&&mins<=1200) return{key:'after', label:'애프터장',cls:'session-after'};
   return{key:'closed',label:'장마감',cls:'session-closed'};
 }
 
@@ -581,12 +581,13 @@ function renderStocks(d){
   if(!box) return;
   const session=getMarketSession();
   const map={
-    '005930':{stock:d.samsung, overseasUsd:d.samsungOverseasUsd},
-    '000660':{stock:d.skhynix, overseasUsd:d.skhynixOverseasUsd},
+    '005930':{stock:d.samsung, overseas:d.samsungOverseas},
+    '000660':{stock:d.skhynix, overseas:d.skhynixOverseas},
   };
+  const SOURCE_LABEL={binance:'바이낸스', frankfurt:'프랑크푸르트 OTC'};
 
   box.innerHTML=STOCKS_META.map(meta=>{
-    const {stock:s, overseasUsd}=map[meta.code];
+    const {stock:s, overseas}=map[meta.code];
     if(!s){
       return`<div class="stock-card"><div style="font-size:12px;color:var(--text2)">${meta.name} 시세를 불러오지 못했습니다</div></div>`;
     }
@@ -594,9 +595,11 @@ function renderStocks(d){
     const arrow=up?'▲':'▼';
     // 한국식 표기: 상승=빨강, 하락=파랑
     const chgCol=up?'var(--red)':'var(--blue)';
-    // 해외(USD) 추정가: 바이낸스 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물 가격(USD) × 실시간 환율(10초 갱신)
-    // = 해외 시장에서 보는 가격을 원화로 환산한 값. 국내가와 같은 줄에서 바로 비교됨.
+    // 해외(USD) 추정가: 바이낸스 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물 가격(USD, 실패 시 독일
+    // 프랑크푸르트 OTC로 자동 대체) × 실시간 환율(10초 갱신) = 해외에서 보는 가격을 원화로 환산.
+    const overseasUsd = overseas?.price ?? null;
     const overseasWon = (overseasUsd!=null && lastUsdKrw>0) ? overseasUsd*lastUsdKrw : null;
+    const sourceLabel = overseas?.source ? SOURCE_LABEL[overseas.source] : null;
 
     return`<div class="stock-card">
       <div class="stock-top">
@@ -611,13 +614,13 @@ function renderStocks(d){
         <div class="price-col-divider"></div>
         <div class="price-col">
           <span class="price-col-lbl">해외 추정가(₩)</span>
-          <span class="price-col-val">${overseasWon!=null?'₩'+fmtWon(overseasWon):'--'}</span>
-          ${overseasUsd!=null?`<span class="stock-fx">≈ $${overseasUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} USD</span>`:''}
+          <span class="price-col-val">${overseasWon!=null?'₩'+fmtWon(overseasWon):'조회 실패'}</span>
+          ${overseasUsd!=null?`<span class="stock-fx">≈ $${overseasUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} USD${sourceLabel?' · '+sourceLabel:''}</span>`:''}
         </div>
       </div>
       <div class="stock-bottom">
         <span class="stock-fx">환율 1$ = ₩${lastUsdKrw.toLocaleString('ko-KR',{maximumFractionDigits:1})}</span>
-        <div class="stock-change" style="color:${chgCol}">${arrow} ${fmtWon(Math.abs(s.change))}원 (${up?'+':''}${s.changeRate.toFixed(2)}%)</div>
+        <div class="stock-change" style="color:${chgCol}">전 거래일 대비 ${arrow} ${fmtWon(Math.abs(s.change))}원 (${up?'+':''}${s.changeRate.toFixed(2)}%)</div>
       </div>
     </div>`;
   }).join('');
