@@ -584,7 +584,7 @@ function renderStocks(d){
     '005930':{stock:d.samsung, overseas:d.samsungOverseas},
     '000660':{stock:d.skhynix, overseas:d.skhynixOverseas},
   };
-  const SOURCE_LABEL={binance:'바이낸스', frankfurt:'프랑크푸르트 OTC'};
+  const SOURCE_LABEL={bybit:'바이비트', binance:'바이낸스'};
 
   box.innerHTML=STOCKS_META.map(meta=>{
     const {stock:s, overseas}=map[meta.code];
