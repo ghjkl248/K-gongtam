@@ -90,20 +90,21 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 .update-chip{font-size:10px;color:var(--text2);background:var(--bg);border-radius:8px;padding:3px 8px}
 .stock-row{display:flex;flex-direction:column;gap:8px}
 .stock-card{background:var(--bg);border-radius:12px;padding:11px 13px}
-.stock-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.stock-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .stock-name{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.stock-fx{font-size:10px;color:var(--text2)}
 .session-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap}
 .session-pre{background:rgba(186,117,23,.15);color:var(--amber)}
 .session-open{background:rgba(15,110,86,.15);color:var(--green)}
 .session-after{background:rgba(30,111,224,.13);color:var(--blue)}
 .session-closed{background:rgba(102,102,102,.13);color:var(--text2)}
-.stock-change-row{display:flex;justify-content:flex-end;margin-bottom:8px}
-.stock-change{font-size:12px;font-weight:600;white-space:nowrap}
-.price-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.price-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:7px}
 .price-col{display:flex;flex-direction:column;gap:2px}
 .price-col-lbl{font-size:10px;color:var(--text2)}
 .price-col-val{font-size:18px;font-weight:700}
 .price-col-divider{width:1px;background:var(--border);align-self:stretch;margin:2px 0}
+.stock-bottom{display:flex;align-items:center;justify-content:space-between;border-top:1px dashed var(--border);padding-top:7px}
+.stock-change{font-size:12px;font-weight:600;white-space:nowrap}
 .stock-name svg{display:block;flex-shrink:0}
 .fx-note{margin-top:7px;font-size:9px;color:var(--text2);text-align:right}
 .stock-skeleton{height:78px;border-radius:12px;background:var(--bg)}
@@ -530,7 +531,10 @@ function isMarketHours(){
 // ── 주요 종목(삼성전자/SK하이닉스) 실시간 시세 ──
 
 // 한국거래소 기준 장 구분을 KST 시각만으로 직접 판별.
-// 프리마켓 08:00~09:00, 정규장 09:00~15:30, 애프터마켓(시간외 단일가) 15:30~18:00, 그 외 장마감.
+// 프리마켓 08:00~09:00, 정규장 09:00~15:30, 애프터마켓(시간외 단일가) 15:30~18:00.
+// 18:00~다음날 08:00(그리고 주말 전체)는 '장마감'으로 표시되며, 이 구간에는 네이버 API가
+// 자체적으로 직전 정규장 종가를 그대로 내려주므로(가격이 바뀌지 않음) 별도 처리 없이도
+// "애프터장 종료 후 종가 유지 → 다음날 08:00 프리장 시작과 함께 자동 갱신"이 그대로 성립함.
 function getMarketSession(){
   const kst=new Date(Date.now()+9*3600000);
   const day=kst.getUTCDay(); // 0=일,6=토 (kst로 보정했으므로 getUTCDay 사용)
@@ -543,10 +547,12 @@ function getMarketSession(){
 }
 
 // 외부 로고 API(Clearbit 등)는 서비스 종료/불안정 이력이 있어 의존하지 않고,
-// 항상 동일하게 렌더링되는 인라인 SVG로 브랜드 컬러를 살린 간단한 로고를 직접 그림.
+// 항상 동일하게 렌더링되는 인라인 SVG로 컬러 원+이니셜 로고를 직접 그림.
 const STOCKS_META=[
-  {code:'005930',name:'삼성전자',logo:`<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#1428A0"/><ellipse cx="10" cy="10" rx="6.2" ry="3.1" fill="none" stroke="#fff" stroke-width="1.3"/><circle cx="10" cy="10" r="1.6" fill="#fff"/></svg>`},
-  {code:'000660',name:'SK하이닉스',logo:`<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#E31837"/><path d="M6.5 13.5 C6.5 9, 9 6.5, 10 6.5 C11 6.5, 13.5 9, 13.5 13.5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><circle cx="10" cy="6.5" r="1.3" fill="#fff"/></svg>`},
+  {code:'005930',name:'삼성전자',binanceSymbol:'SAMSUNGUSDT',
+    logo:`<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#1428A0"/><text x="10" y="14" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">S</text></svg>`},
+  {code:'000660',name:'SK하이닉스',binanceSymbol:'SKHYNIXUSDT',
+    logo:`<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#E31837"/><text x="10" y="14" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">H</text></svg>`},
 ];
 let lastUsdKrw=1400; // market.js의 환율(5분 주기). stocks.js가 10초마다 더 자주 갱신해 lastUsdKrw를 덮어씀
 
@@ -574,10 +580,13 @@ function renderStocks(d){
   const box=document.getElementById('stock-row');
   if(!box) return;
   const session=getMarketSession();
-  const map={'005930':d.samsung,'000660':d.skhynix};
+  const map={
+    '005930':{stock:d.samsung, overseasUsd:d.samsungOverseasUsd},
+    '000660':{stock:d.skhynix, overseasUsd:d.skhynixOverseasUsd},
+  };
 
   box.innerHTML=STOCKS_META.map(meta=>{
-    const s=map[meta.code];
+    const {stock:s, overseasUsd}=map[meta.code];
     if(!s){
       return`<div class="stock-card"><div style="font-size:12px;color:var(--text2)">${meta.name} 시세를 불러오지 못했습니다</div></div>`;
     }
@@ -585,17 +594,14 @@ function renderStocks(d){
     const arrow=up?'▲':'▼';
     // 한국식 표기: 상승=빨강, 하락=파랑
     const chgCol=up?'var(--red)':'var(--blue)';
-    // 해외 환산가: 원화→USD→다시 원화로 환산한 값. 같은 자산이므로 숫자는 국내가와 거의 동일하지만,
-    // 환율이 10초 사이 미세하게 움직이면 그 변화가 그대로 반영되어 "실시간 환율이 적용된 비교값"이 됨
-    const overseasWon = lastUsdKrw>0 ? (s.price/lastUsdKrw)*lastUsdKrw : s.price;
+    // 해외(USD) 추정가: 바이낸스 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물 가격(USD) × 실시간 환율(10초 갱신)
+    // = 해외 시장에서 보는 가격을 원화로 환산한 값. 국내가와 같은 줄에서 바로 비교됨.
+    const overseasWon = (overseasUsd!=null && lastUsdKrw>0) ? overseasUsd*lastUsdKrw : null;
 
     return`<div class="stock-card">
       <div class="stock-top">
         <div class="stock-name">${meta.logo}<span>${meta.name}</span></div>
         <span class="session-badge ${session.cls}">${session.label}</span>
-      </div>
-      <div class="stock-change-row">
-        <div class="stock-change" style="color:${chgCol}">${arrow} ${fmtWon(Math.abs(s.change))} (${up?'+':''}${s.changeRate.toFixed(2)}%)</div>
       </div>
       <div class="price-compare">
         <div class="price-col">
@@ -604,11 +610,15 @@ function renderStocks(d){
         </div>
         <div class="price-col-divider"></div>
         <div class="price-col">
-          <span class="price-col-lbl">해외 환산가(₩)</span>
-          <span class="price-col-val">₩${fmtWon(overseasWon)}</span>
+          <span class="price-col-lbl">해외 추정가(₩)</span>
+          <span class="price-col-val">${overseasWon!=null?'₩'+fmtWon(overseasWon):'--'}</span>
+          ${overseasUsd!=null?`<span class="stock-fx">≈ $${overseasUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} USD</span>`:''}
         </div>
       </div>
-      <div class="fx-note">환율 ₩${lastUsdKrw.toLocaleString('ko-KR',{maximumFractionDigits:1})}/USD 적용 · 10초마다 갱신</div>
+      <div class="stock-bottom">
+        <span class="stock-fx">환율 1$ = ₩${lastUsdKrw.toLocaleString('ko-KR',{maximumFractionDigits:1})}</span>
+        <div class="stock-change" style="color:${chgCol}">${arrow} ${fmtWon(Math.abs(s.change))}원 (${up?'+':''}${s.changeRate.toFixed(2)}%)</div>
+      </div>
     </div>`;
   }).join('');
 }
