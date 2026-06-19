@@ -10,23 +10,40 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=8'); // 10초 폴링보다 살짝 짧게 캐시해 약간의 버퍼 확보
 
   try {
-    const [samsung, skhynix] = await Promise.allSettled([
+    const [samsung, skhynix, usdkrw] = await Promise.allSettled([
       fetchStock('005930'), // 삼성전자
       fetchStock('000660'), // SK하이닉스
+      fetchUSDKRW(),         // 환율도 10초마다 함께 갱신 (해외 환산가 계산용)
     ]);
 
     if (samsung.status === 'rejected') console.error('stocks: 삼성전자 조회 실패:', samsung.reason?.message);
     if (skhynix.status === 'rejected') console.error('stocks: SK하이닉스 조회 실패:', skhynix.reason?.message);
+    if (usdkrw.status === 'rejected')  console.error('stocks: 환율 조회 실패:', usdkrw.reason?.message);
 
     res.status(200).json({
       samsung: samsung.status === 'fulfilled' ? samsung.value : null,
       skhynix: skhynix.status === 'fulfilled' ? skhynix.value : null,
+      usdkrw: usdkrw.status === 'fulfilled' ? usdkrw.value : null,
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
     console.error('stocks: handler 전역 예외:', e.message);
     res.status(500).json({ error: e.message });
   }
+}
+
+// market.js의 fetchUSDKRW와 동일한 소스(Yahoo Finance). 10초 폴링 화면에서 환율도
+// "살아있는 값"으로 보여주기 위해 이 파일에서도 독립적으로 조회함.
+async function fetchUSDKRW() {
+  const r = await fetch(
+    'https://query1.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d',
+    { headers: { 'User-Agent': 'Mozilla/5.0' } }
+  );
+  if (!r.ok) throw new Error('yahoo USDKRW fetch failed: status ' + r.status);
+  const d = await r.json();
+  const price = d.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (!price) throw new Error('yahoo USDKRW response missing regularMarketPrice');
+  return price;
 }
 
 // 네이버 응답의 숫자 필드는 "362,500"처럼 천 단위 쉼표가 포함된 문자열로 내려옴.
