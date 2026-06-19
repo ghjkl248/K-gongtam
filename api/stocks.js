@@ -10,26 +10,47 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=8'); // 10초 폴링보다 살짝 짧게 캐시해 약간의 버퍼 확보
 
   try {
-    const [samsung, skhynix, usdkrw] = await Promise.allSettled([
-      fetchStock('005930'), // 삼성전자
-      fetchStock('000660'), // SK하이닉스
+    const [samsung, skhynix, usdkrw, samsungBn, skhynixBn] = await Promise.allSettled([
+      fetchStock('005930'), // 삼성전자 (네이버, 국내 정규장 기준)
+      fetchStock('000660'), // SK하이닉스 (네이버, 국내 정규장 기준)
       fetchUSDKRW(),         // 환율도 10초마다 함께 갱신 (해외 환산가 계산용)
+      fetchBinancePerp('SAMSUNGUSDT'),  // 바이낸스 무기한 선물 — 해외(USD) 추정가 소스
+      fetchBinancePerp('SKHYNIXUSDT'),
     ]);
 
     if (samsung.status === 'rejected') console.error('stocks: 삼성전자 조회 실패:', samsung.reason?.message);
     if (skhynix.status === 'rejected') console.error('stocks: SK하이닉스 조회 실패:', skhynix.reason?.message);
     if (usdkrw.status === 'rejected')  console.error('stocks: 환율 조회 실패:', usdkrw.reason?.message);
+    if (samsungBn.status === 'rejected') console.error('stocks: 삼성전자 바이낸스 조회 실패:', samsungBn.reason?.message);
+    if (skhynixBn.status === 'rejected') console.error('stocks: SK하이닉스 바이낸스 조회 실패:', skhynixBn.reason?.message);
 
     res.status(200).json({
       samsung: samsung.status === 'fulfilled' ? samsung.value : null,
       skhynix: skhynix.status === 'fulfilled' ? skhynix.value : null,
       usdkrw: usdkrw.status === 'fulfilled' ? usdkrw.value : null,
+      samsungOverseasUsd: samsungBn.status === 'fulfilled' ? samsungBn.value : null,
+      skhynixOverseasUsd: skhynixBn.status === 'fulfilled' ? skhynixBn.value : null,
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
     console.error('stocks: handler 전역 예외:', e.message);
     res.status(500).json({ error: e.message });
   }
+}
+
+// 바이낸스 USDT 무기한 선물(perpetual futures) 가격 조회. 인증 불필요한 공개 마켓 데이터 엔드포인트.
+// 삼성전자/SK하이닉스는 한국거래소 외 정식 상장이 없어서, "해외에서 실시간으로 거래되는 가격"에
+// 가장 가까운 공개 소스가 바이낸스의 SAMSUNGUSDT/SKHYNIXUSDT 무기한 선물(2025.6 상장)임.
+// 단, 이는 현금(USDT) 정산되는 파생상품 가격으로 한국 코스피 정식 시세가 아니라 참고용 추정치임.
+// 한국 거주자는 바이낸스 본사 차원에서 이 상품 이용이 제한되지만, 가격 조회 자체(공개 API)는
+// Vercel 서버(해외 리전)에서 호출하므로 영향받지 않음.
+async function fetchBinancePerp(symbol) {
+  const r = await fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`);
+  if (!r.ok) throw new Error(`binance ${symbol} fetch failed: status ${r.status}`);
+  const d = await r.json();
+  const price = parseFloat(d.price);
+  if (!price || Number.isNaN(price)) throw new Error(`binance ${symbol} invalid price: ${JSON.stringify(d)}`);
+  return price; // USD(USDT 기준) 가격
 }
 
 // market.js의 fetchUSDKRW와 동일한 소스(Yahoo Finance). 10초 폴링 화면에서 환율도
