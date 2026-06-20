@@ -238,6 +238,17 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
     </div>
   </div>
 
+  <!-- 미국 히트맵 -->
+  <div class="card">
+    <div class="sec-title" style="display:flex;justify-content:space-between">
+      <span>미국 HEAT MAP (시가총액 상위 30)</span>
+      <span style="font-weight:400;color:var(--text2);font-size:10px">5분마다 갱신</span>
+    </div>
+    <div id="heatmap-box-us" style="position:relative;width:100%;aspect-ratio:16/11;border-radius:10px;overflow:hidden;background:var(--bg)">
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-size:12px">불러오는 중...</div>
+    </div>
+  </div>
+
   <!-- 대화방 -->
   <div class="card">
     <div class="sec-title" style="display:flex;justify-content:space-between">
@@ -646,7 +657,8 @@ async function loadHeatmap(market, boxId){
   const box=document.getElementById(boxId);
   if(!box) return;
   try{
-    const r=await fetch(`/api/heatmap?market=${market}`,{cache:'no-store'});
+    const url = market==='us' ? '/api/heatmap-us' : `/api/heatmap?market=${market}`;
+    const r=await fetch(url,{cache:'no-store'});
     if(!r.ok) throw new Error('heatmap fetch failed: '+r.status);
     const d=await r.json();
     if(!d.stocks || !d.stocks.length) throw new Error('빈 데이터');
@@ -788,9 +800,11 @@ loadStocks();
 setInterval(loadStocks, 10000); // 요청사항: 종목 시세는 10초 간격으로 갱신
 loadHeatmap('kospi','heatmap-box-kospi');
 loadHeatmap('kosdaq','heatmap-box-kosdaq');
+loadHeatmap('us','heatmap-box-us');
 setInterval(()=>{
   loadHeatmap('kospi','heatmap-box-kospi');
   loadHeatmap('kosdaq','heatmap-box-kosdaq');
+  loadHeatmap('us','heatmap-box-us');
 }, 5*60000); // 히트맵은 5분 간격으로 갱신
 </script>
 </body>
