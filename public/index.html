@@ -152,7 +152,10 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 
   <!-- AI 해석 -->
   <div class="ai-box">
-    <div class="ai-lbl">&#10024; AI 시장 해석</div>
+    <div class="ai-lbl" style="display:flex;justify-content:space-between">
+      <span>&#10024; AI 시장 해석</span>
+      <span id="ai-updated-at" style="font-weight:400;color:var(--text2)"></span>
+    </div>
     <div class="ai-text" id="ai-text"><span class="spin"></span> 분석 중...</div>
   </div>
 
@@ -506,6 +509,8 @@ async function fetchAI(score, data){
     });
     const d=await res.json();
     el.textContent=d.text||'AI 분석 일시 불가';
+    const updEl=document.getElementById('ai-updated-at');
+    if(updEl) updEl.textContent='업데이트 '+new Date().toLocaleTimeString('ko-KR',{hour12:false});
   }catch(e){
     el.textContent='AI 분석 일시 불가. 잠시 후 새로고침해 주세요.';
   }
