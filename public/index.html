@@ -23,10 +23,6 @@
 <title>K-공탐지수</title>
 <!-- Google AdSense -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4396806527115932" crossorigin="anonymous"></script>
-<!-- Firebase SDK: 실시간 접속자 수(presence) 표시용. REST API와 달리 onDisconnect를 지원해서
-     브라우저가 닫히거나 네트워크가 끊기면 서버가 자동으로 접속자 목록에서 제거해줌 -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <link rel="manifest" href="/manifest.json">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -73,11 +69,6 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
 .ai-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:10px}
 .ai-lbl{font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:5px}
 .ai-text{font-size:13px;color:var(--text);line-height:1.7}
-.chat-msgs{max-height:200px;overflow-y:auto;margin-bottom:8px;display:flex;flex-direction:column;gap:6px}
-.msg{padding:8px 11px;border-radius:14px;font-size:13px;line-height:1.5;max-width:86%}
-.msg-other{background:var(--bg);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
-.msg-me{background:var(--red);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
-.msg-nick{font-size:10px;color:var(--text2);margin-bottom:2px}
 .chat-row{display:flex;gap:6px}
 .chat-row input{flex:1;font-size:13px;padding:0 12px;height:36px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--text);outline:none}
 .chat-row input:focus{border-color:var(--red)}
@@ -119,7 +110,11 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
   </div>
 
   <!-- 게이지 -->
-  <div class="card">
+  <div class="card" style="position:relative">
+    <div id="fx-badge" style="position:absolute;top:14px;right:16px;text-align:right;font-size:10px;color:var(--text2)">
+      <div>USD/KRW</div>
+      <div id="fx-value" style="font-size:13px;font-weight:700;color:var(--text)">--</div>
+    </div>
     <div class="gauge-area">
       <svg viewBox="0 0 320 185" width="100%" style="max-width:340px;display:block;margin:0 auto;overflow:visible">
         <path d="M 40 160 A 120 120 0 0 1 280 160" fill="none" stroke="var(--border)" stroke-width="26"/>
@@ -157,6 +152,7 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
       <span id="ai-updated-at" style="font-weight:400;color:var(--text2)"></span>
     </div>
     <div class="ai-text" id="ai-text"><span class="spin"></span> 분석 중...</div>
+    <div style="margin-top:7px;font-size:10px;color:var(--text2)">※ 투자 판단의 책임은 투자자 본인에게 있습니다</div>
   </div>
 
   <!-- 한국 vs 미국 -->
@@ -181,11 +177,6 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
     <div class="comp-grid" id="comp-grid">
       <div style="grid-column:span 2;text-align:center;padding:16px;color:var(--text2);font-size:12px"><span class="spin"></span></div>
     </div>
-  </div>
-
-  <!-- 참고 자료 (공탐지수 계산에는 미반영, 문구만 표시) -->
-  <div class="card">
-    <div class="sec-title" style="margin-bottom:0">참고 자료 : VKOSPI, 외인 수급, 원달러 환율 등</div>
   </div>
 
   <!-- 범례 -->
@@ -252,23 +243,23 @@ body{font-family:-apple-system,'Pretendard',sans-serif;background:var(--bg);colo
     </div>
   </div>
 
-  <!-- 대화방 -->
+  <!-- 의견/제안 -->
   <div class="card">
-    <div class="sec-title" style="display:flex;justify-content:space-between">
-      <span>&#128172; 실시간 대화방</span>
-      <span style="font-weight:400;color:var(--text2)">접속 <span id="cnt">--</span>명</span>
-    </div>
-    <div class="chat-msgs" id="chat-msgs"></div>
-    <div id="chat-error" style="display:none;font-size:11px;color:#fff;background:var(--red);border-radius:8px;padding:6px 10px;margin-bottom:6px"></div>
-    <div class="chat-row">
-      <input id="nick" placeholder="닉네임" style="max-width:76px;flex:none">
-      <input id="msg-inp" placeholder="의견을 남겨주세요..." onkeydown="if(event.key==='Enter')sendMsg()">
-      <button class="send-btn" onclick="sendMsg()">전송</button>
+    <div class="sec-title">&#128172; 의견 · 제안 보내기</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:8px">서비스 개선 의견이나 버그 제보를 남겨주시면 운영자에게 바로 전달됩니다.</div>
+    <div id="feedback-error" style="display:none;font-size:11px;color:#fff;background:var(--red);border-radius:8px;padding:6px 10px;margin-bottom:8px"></div>
+    <div id="feedback-success" style="display:none;font-size:12px;color:#fff;background:var(--green);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-weight:600">✓ 의견이 전달되었습니다. 감사합니다!</div>
+    <textarea id="feedback-text" placeholder="의견이나 제안, 버그 내용을 자유롭게 적어주세요..." style="width:100%;min-height:80px;font-size:13px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:inherit;box-sizing:border-box"></textarea>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="feedback-contact" placeholder="답변받을 이메일(선택)" style="flex:1;font-size:13px;padding:0 12px;height:36px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--text);outline:none">
+      <button class="send-btn" onclick="sendFeedback()" id="feedback-btn">전송</button>
     </div>
   </div>
 
   <div class="note">
-    투자에 대한 모든 책임은 본인에게 있습니다<br>
+    <div style="background:rgba(226,75,74,.08);border:1px solid rgba(226,75,74,.25);border-radius:10px;padding:9px 12px;margin-bottom:8px;color:var(--red);font-weight:700;font-size:12px">
+      ⚠️ 투자 판단과 그에 따른 모든 책임은 투자자 본인에게 있습니다
+    </div>
     데이터: Yahoo Finance · Claude AI · KRX · 참고용<br>
     장중 5분 / 장외 30분 자동 갱신<br>
     <a href="/privacy.html" style="color:#E24B4A;font-size:10px;text-decoration:none;">개인정보처리방침</a>
@@ -283,99 +274,48 @@ const COMPS=[
   {key:'vkospi',  name:'변동성',   desc:'VKOSPI 역수'},
 ];
 
-let scores={}, chatMessages=[];
-let isSending=false; // 메시지 전송 중에는 자동 새로고침 건너뜀
+let scores={};
 
-// ── Firebase 실시간 대화방 ──
-const FIREBASE_URL='https://k-gongtam-default-rtdb.firebaseio.com';
-const MAX_MESSAGES=100; // 대화방에 보관할 최대 메시지 수 (서버의 send-message.js가 초과분을 정리함)
+// ── 의견 · 제안 전송 (이메일) ──
+let isSendingFeedback=false;
 
-// ── 실시간 접속자 수 (Firebase presence) ──
-// presence/{내고유ID} 경로에 내 접속 사실을 기록하고, onDisconnect()로 "연결이 끊기면
-// 이 노드를 지워줘"라고 서버에 미리 예약해둠. 브라우저를 닫거나 네트워크가 끊기면
-// 클라이언트 코드 실행 없이도 Firebase 서버가 자동으로 지워주므로 정확한 동시 접속자 수가 됨.
-let presenceRef=null;
-
-function initPresence(){
-  try{
-    if(!firebase.apps.length){
-      firebase.initializeApp({databaseURL:FIREBASE_URL});
-    }
-    const db=firebase.database();
-    const myId='visitor_'+Math.random().toString(36).slice(2,10)+'_'+Date.now();
-    presenceRef=db.ref('presence/'+myId);
-
-    // 서버와 연결이 살아있는지 보는 특수 경로. true가 되는 시점에만 내 presence를 등록해야
-    // 재연결 시 중복 등록이나 끊긴 접속이 안 지워지는 문제를 막을 수 있음
-    db.ref('.info/connected').on('value',(snap)=>{
-      if(snap.val()===true){
-        presenceRef.onDisconnect().remove().then(()=>{
-          presenceRef.set({connectedAt:firebase.database.ServerValue.TIMESTAMP});
-        });
-      }
-    });
-
-    // 전체 접속자 수 실시간 구독 (다른 사람이 들어오거나 나갈 때마다 자동 갱신됨)
-    db.ref('presence').on('value',(snap)=>{
-      const cntEl=document.getElementById('cnt');
-      if(cntEl) cntEl.textContent=snap.numChildren();
-    });
-  }catch(e){
-    console.warn('presence 초기화 실패, 접속자 수는 표시되지 않습니다:',e.message);
-    const cntEl=document.getElementById('cnt');
-    if(cntEl) cntEl.textContent='-';
+async function sendFeedback(){
+  if(isSendingFeedback)return;
+  const textEl=document.getElementById('feedback-text');
+  const contactEl=document.getElementById('feedback-contact');
+  const btn=document.getElementById('feedback-btn');
+  const errEl=document.getElementById('feedback-error');
+  const okEl=document.getElementById('feedback-success');
+  const text=(textEl.value||'').trim();
+  if(!text){
+    if(errEl){errEl.textContent='내용을 입력해주세요.';errEl.style.display='block';setTimeout(()=>errEl.style.display='none',4000);}
+    return;
   }
-}
-
-async function loadChat(){
-  if(isSending)return; // 전송 중이면 자동 갱신 건너뛰기 (메시지 사라짐 방지)
+  isSendingFeedback=true;
+  if(btn){btn.disabled=true;btn.textContent='전송 중...';}
+  if(errEl)errEl.style.display='none';
+  if(okEl)okEl.style.display='none';
   try{
-    const r=await fetch(`${FIREBASE_URL}/messages.json?orderBy="ts"&limitToLast=${MAX_MESSAGES}`);
-    if(!r.ok) throw new Error('fetch failed');
-    const d=await r.json();
-    if(!d){
-      // DB는 비어있지만 연결은 정상 → 빈 배열 유지 (기본 메시지 안 보여줌)
-      return;
-    }
-    const loaded=Object.values(d)
-      .filter(m=>m&&typeof m==='object'&&m.text&&m.nick) // undefined 방지: 유효한 메시지만
-      .sort((a,b)=>(a.ts||0)-(b.ts||0));
-    chatMessages=loaded;
-    renderChat();
-  }catch(e){
-    console.warn('Firebase 연결 실패, 로컬 모드:',e.message);
-    if(chatMessages.length===0){
-      chatMessages=[
-        {nick:'주식고수99',text:'오늘 코스피 엄청 강하네요! 탐욕 구간 진입',time:'10:23',ts:1},
-        {nick:'반도체덕후',text:'삼성전자 외인 순매수 계속 들어오는중',time:'11:05',ts:2},
-        {nick:'개미투자자',text:'K-공탐지수 보고 타점 잡기 좋네요',time:'12:41',ts:3},
-      ];
-      renderChat();
-    }
-  }
-}
-
-async function saveMsg(msg){
-  try{
-    const r=await fetch('/api/send-message',{
+    const r=await fetch('/api/send-feedback',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(msg)
+      body:JSON.stringify({text, contact:(contactEl.value||'').trim()})
     });
-    if(!r.ok){
-      const body=await r.text().catch(()=>'');
-      console.warn('메시지 저장 실패:', r.status, body);
-      return {ok:false, error:body||('status '+r.status)};
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok || !d.ok){
+      throw new Error(d.error || ('status '+r.status));
     }
-    return {ok:true};
+    textEl.value='';
+    contactEl.value='';
+    if(okEl){okEl.style.display='block';setTimeout(()=>okEl.style.display='none',5000);}
   }catch(e){
-    console.warn('저장 실패',e.message);
-    return {ok:false, error:e.message};
+    console.warn('의견 전송 실패:',e.message);
+    if(errEl){errEl.textContent='전송에 실패했습니다: '+e.message;errEl.style.display='block';}
+  }finally{
+    isSendingFeedback=false;
+    if(btn){btn.disabled=false;btn.textContent='전송';}
   }
 }
-
-// 20초마다 새 메시지 자동 로드 (전송 중이 아닐 때만)
-setInterval(loadChat, 20000);
 
 function getState(s){
   if(s<=24)return{label:'극단 공포',short:'극단공포',col:'#0B6B47',eng:'Extreme Fear',desc:'극도의 공포 상태입니다. 역발상 매수 기회를 검토해 보세요.'};
@@ -420,60 +360,6 @@ function renderComps(){
   }).join('');
 }
 
-function renderChat(){
-  const box=document.getElementById('chat-msgs');
-  if(!box)return;
-  const me=(document.getElementById('nick').value||'').trim();
-  box.innerHTML=chatMessages
-    .filter(m=>m&&m.text&&m.nick) // 빈 데이터 필터링
-    .map(m=>{
-      const isMe=me&&m.nick===me;
-      const safeText=m.text||'';
-      const safeTime=m.time||'';
-      const safeNick=m.nick||'익명';
-      return`<div style="align-self:${isMe?'flex-end':'flex-start'};max-width:86%">
-        ${!isMe?`<div class="msg-nick">${safeNick}</div>`:''}
-        <div class="msg ${isMe?'msg-me':'msg-other'}">${safeText}<span style="font-size:9px;opacity:.55;margin-left:6px">${safeTime}</span></div>
-      </div>`;
-    }).join('');
-  box.scrollTop=box.scrollHeight;
-  // 접속자 수는 더 이상 여기서 갱신하지 않음 → initPresence()의 실시간 리스너가 전담
-}
-
-function sendMsg(){
-  const nick=(document.getElementById('nick').value||'').trim()||'익명';
-  const inp=document.getElementById('msg-inp');
-  const txt=inp.value.trim();
-  if(!txt)return;
-  const now=new Date();
-  const time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  const msg={nick,text:txt,time,ts:Date.now()};
-  isSending=true;
-  chatMessages.push(msg);
-  if(chatMessages.length>60)chatMessages.shift();
-  inp.value='';
-  renderChat();
-  saveMsg(msg).then(result=>{
-    if(!result.ok){
-      // 서버 저장이 실패했으면 방금 화면에 낙관적으로 추가했던 메시지를 다시 빼서
-      // "올라간 것처럼 보였다가 나갔다 오면 사라지는" 혼동을 방지함
-      const idx=chatMessages.indexOf(msg);
-      if(idx>-1) chatMessages.splice(idx,1);
-      renderChat();
-      // alert()는 PWA/모바일 웹뷰 환경에서 차단되거나 안 보일 수 있어, 화면 안에 직접
-      // 보이는 배너로 표시. 10초 후 자동으로 사라짐
-      const errEl=document.getElementById('chat-error');
-      if(errEl){
-        errEl.textContent='메시지 저장 실패: '+result.error;
-        errEl.style.display='block';
-        setTimeout(()=>{errEl.style.display='none';},10000);
-      }
-    }
-  }).finally(()=>{
-    setTimeout(()=>{isSending=false;},3000); // 3초간 자동갱신 보류
-  });
-}
-
 function updateClock(){
   const n=new Date();
   const el=document.getElementById('clock');
@@ -482,7 +368,10 @@ function updateClock(){
 
 async function fetchMarketData(){
   try{
-    const res=await fetch('/api/market');
+    // cache:'no-store'로 브라우저가 이전 응답을 재사용하지 않게 강제함.
+    // Vercel CDN의 s-maxage=300(5분)은 그대로 유지되어 서버 부하는 동일하게 낮지만,
+    // 5분이 지난 뒤에는 브라우저가 반드시 새로 요청해서 최신 점수를 받아오게 됨.
+    const res=await fetch('/api/market',{cache:'no-store'});
     if(!res.ok) throw new Error('API 오류');
     return await res.json();
   }catch(e){
@@ -568,8 +457,17 @@ async function loadAll(){
   document.getElementById('us-st').textContent=usSt.short;
   document.getElementById('us-st').style.color=usSt.col;
 
-  await fetchAI(total, data);
+  lastScoreData={score:total, kospiChg, usdkrw}; // refreshAI()가 5분마다 이 값을 그대로 사용
+
   await saveTodayScore(total); // 오늘 점수를 히스토리에 기록 (UI에는 표시하지 않지만 데이터는 계속 축적)
+}
+
+// AI 시장 해석은 공탐지수 갱신 주기(장중 5분/장외 30분)와 분리해서, 항상 5분마다
+// 독립적으로 갱신함. lastScoreData에 최신 점수/지표를 저장해두고 그걸 매번 함께 보냄.
+let lastScoreData={score:50, kospiChg:0, usdkrw:1400};
+
+async function refreshAI(){
+  await fetchAI(lastScoreData.score, lastScoreData);
 }
 
 function isMarketHours(){
@@ -619,6 +517,9 @@ async function loadStocks(){
     renderStocks(d);
     const updEl=document.getElementById('stock-updated-at');
     if(updEl) updEl.textContent=new Date().toLocaleTimeString('ko-KR',{hour12:false});
+    // 게이지 우상단 실시간 환율 표시 (10초마다 갱신, 페이지를 열면 바로 보이는 위치)
+    const fxEl=document.getElementById('fx-value');
+    if(fxEl && d.usdkrw>0) fxEl.textContent='₩'+d.usdkrw.toLocaleString('ko-KR',{maximumFractionDigits:1});
   }catch(e){
     console.warn('종목 시세 로드 실패:',e.message);
     // 기존에 표시 중인 카드가 있으면 그대로 유지하고, 처음부터 실패한 경우에만 안내 문구 표시
@@ -795,12 +696,11 @@ function renderHeatmap(stocks, boxId){
   }).join('');
 }
 
-initPresence();
-loadChat();
 updateClock();
 setInterval(updateClock,1000);
-loadAll();
+loadAll().then(refreshAI); // loadAll이 lastScoreData를 채운 뒤에 첫 AI 해석을 호출
 setInterval(loadAll, isMarketHours()?5*60000:30*60000);
+setInterval(refreshAI, 5*60000); // 요청사항: AI 시장 해석은 항상 5분마다 독립적으로 갱신
 loadStocks();
 setInterval(loadStocks, 10000); // 요청사항: 종목 시세는 10초 간격으로 갱신
 loadHeatmap('kospi','heatmap-box-kospi');
