@@ -426,22 +426,32 @@ async function loadAll(){
   // ── 공탐지수 핵심 4개 지표 (이격도/시장폭/주가강도/변동성) ──
   // 이격도(momentum): CNN 방식처럼 '당일 등락률'이 아니라 'KOSPI가 125일 이동평균 대비
   // 얼마나 떨어져 있는가'를 사용. tanh로 매끄럽게 압축해 극단치에서도 항상 0~100 안에 머물게 함.
-  const momentumScore = Math.min(100, Math.max(0, 50 + 50*Math.tanh((ma125dev||0)/15)));
+  // [2026-10 재보정] 상시 탐욕 쏠림 해소를 위해 아래 3가지를 조정함.
+  //  1) 변동성: VKOSPI 20을 중립(50점)으로. (기존: 20 -> 70점이라 평상시에도 탐욕 쪽으로 +20 편향)
+  //     VKOSPI 15 -> 70, 20 -> 50, 25 -> 30, 30 -> 10
+  //  2) 주가강도: 신고가-신저가 차이를 '비율'이 아니라 '전체 종목 대비 비중'으로 계산하고 tanh로 완만하게.
+  //     (기존: 신저가가 거의 없으면 신고가 몇 개만 있어도 90점 이상으로 포화)
+  //  3) 이격도: tanh 기울기를 15 -> 20으로 완화(강세장에서 80~90점 포화 방지)
+  const momentumScore = Math.min(100, Math.max(0, 50 + 50*Math.tanh((ma125dev||0)/20)));
   const breadthScore  = Math.min(100, Math.max(0, (advancing/(advancing+declining||1))*100));
-  const strengthScore = Math.min(100, Math.max(0, 50 + (newHigh-newLow)/(newHigh+newLow||1)*50));
-  const vkospiScore   = Math.min(100, Math.max(0, 100 - Math.min(100, Math.max(0, ((vkospi||20)-10)*3))));
+  const totalIssues   = (advancing+declining)||1;
+  const strengthScore = Math.min(100, Math.max(0, 50 + 50*Math.tanh(((newHigh-newLow)/totalIssues)/0.10)));
+  const vkospiScore   = Math.min(100, Math.max(0, 50 - ((vkospi||20)-20)*4));
 
-  // 이격도 동적 가중치: 이격도(|ma125dev|)가 클수록 momentum의 비중이 커지고,
-  // 0%에 가까울수록(추세선 위/아래로 벗어나지 않은 평범한 장) 4개 지표가 균등(25%씩)하게 반영됨.
-  // base=25%(이격도 0일 때) ~ maxW=47%(이격도 ±45% 이상일 때)까지 선형으로 증가.
+  // 이격도 동적 가중치: 이격도(|ma125dev|)가 클수록 momentum의 비중이 커짐.
+  // 기본 20%(이격도 0일 때) ~ 최대 35%(이격도 ±30% 이상일 때)까지 선형 증가.
+  // 나머지 비중은 시장폭 3 : 변동성 3 : 주가강도 2 비율로 배분
+  //  -> 이격도 0일 때: 이격도 20 / 시장폭 30 / 변동성 30 / 주가강도 20
+  // (추세추종형인 이격도·주가강도 비중을 낮추고, 중립 기준이 명확한 시장폭·변동성 비중을 높임)
   const absDev=Math.abs(ma125dev||0);
-  const wBase=0.25, wMax=0.47, wSatPoint=45;
+  const wBase=0.20, wMax=0.35, wSatPoint=30;
   const wMomentum = wBase + (wMax-wBase) * Math.min(1, absDev/wSatPoint);
-  const wRest = (1-wMomentum)/3;
+  const wRest = 1-wMomentum;
+  const wBreadth=wRest*3/8, wVkospi=wRest*3/8, wStrength=wRest*2/8;
 
   scores={ momentum:momentumScore, breadth:breadthScore, strength:strengthScore, vkospi:vkospiScore };
   const total=Math.round(
-    momentumScore*wMomentum + breadthScore*wRest + strengthScore*wRest + vkospiScore*wRest
+    momentumScore*wMomentum + breadthScore*wBreadth + strengthScore*wStrength + vkospiScore*wVkospi
   );
 
   // 참고: 외인수급(foreignNet)/환율(usdkrw)은 공탐지수 계산에 반영하지 않음.
